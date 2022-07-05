@@ -1,5 +1,7 @@
 // helper functions to export morpho dict to python in parseable string format
 // like {!key! : !val!, !key! : !val!}
+// By: Sam Hocking
+// Updated: 7/5/2022
 
 fn formatDict(dict, delim="!") {
     var substringArr = []
