@@ -79,6 +79,7 @@ fn classifyInner(a=nil, b=nil, threshold=1e-8) {
     }
 }
 
+// wrapped version of classifyInner that returns only 1 or -1 (no 0)
 fn hardClassifyInner(a=nil, b=nil, threshold=1e-8) {
     var res = classifyInner(a=a, b=b, threshold=threshold)
     if (res >= 0) {
@@ -88,6 +89,7 @@ fn hardClassifyInner(a=nil, b=nil, threshold=1e-8) {
     }
 }
 
+// returns 1 if a and b vectors are parallel in the same direction, -1 if parallel in opposite directions, and 0 otherwise
 fn classifyParallel(a=nil, b=nil, threshold=1e-8) {
     var dot = a.inner(b)/(a.norm()*b.norm())
     if (dot > 1-threshold) {
@@ -99,7 +101,7 @@ fn classifyParallel(a=nil, b=nil, threshold=1e-8) {
     }
 }
 
-//"reverse" projection: remove projection of a onto b from a
+//"reverse" projection: remove projection of a onto b from a. returns a vector perpendicular to b, in the same plane as a
 fn a_remove_b(a=nil, b=nil, normalize=false) {
     var v = a - a.inner(b)/b.inner(b)*b
     if ((normalize == true) && (v.norm()>0)) {
