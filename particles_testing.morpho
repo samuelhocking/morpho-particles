@@ -1,4 +1,4 @@
-// Script to project arbitary points in R^3 onto a mesh surface
+// Script to test projection and movement of particles on meshes
 // By: Sam Hocking
 // Updated: 7/5/2022
 
