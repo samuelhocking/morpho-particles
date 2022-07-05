@@ -564,7 +564,6 @@ class SimpleFace{
         self.edgeVectors = self.getEdgeVectors()
         self.edgeUnitVectors = self.getEdgeUnitVectors()
         self.planeUnitNormal = self.getPlaneUnitNormal()
-        self.bisectors = self.getBisectors()
         self.inwardEdgeUnitNormals = self.getInwardEdgeUnitNormals()
         self.vertexAdjEdgeIndices = self.getVertexAdjEdgeIndices()
         self.vertexAdjEdgeVectors = self.getVertexAdjEdgeVectors()
@@ -649,14 +648,6 @@ class SimpleFace{
     getPlaneUnitNormal() {
         var normal = cross(self.edgeVectors[0], self.edgeVectors[1])
         return normal/normal.norm()
-    }
-
-    getBisectors() {
-        return [
-            0.5*(self.edgeUnitVectors[0] - self.edgeUnitVectors[2]),
-            0.5*(self.edgeUnitVectors[1] - self.edgeUnitVectors[0]),
-            0.5*(self.edgeUnitVectors[2] - self.edgeUnitVectors[1])
-        ]
     }
 
     getInwardEdgeUnitNormals() {
@@ -766,10 +757,6 @@ class StarProjector{
             yf1 = classifyInner(a=vx_sn_proj, b=closestFace.facePlaneNormals[0], threshold=threshold)
             ye2 = classifyInner(a=vx_sn_proj, b=closestFace.edgeVectors[1], threshold=threshold)
             yf2 = classifyInner(a=vx_sn_proj, b=closestFace.facePlaneNormals[1], threshold=threshold)
-            // print "ye1: ${ye1}"
-            // print "yf1: ${yf1}"
-            // print "ye2: ${ye2}"
-            // print "yf2: ${yf2}"
 
             if (yf1 + yf2 == 2) {
                 vx_fin_proj = vx_sn_proj
@@ -790,18 +777,6 @@ class StarProjector{
                     elemGrade = 1
                     elemID = closestFace.bottomEdgeID
                 }
-
-                // var ye3_0 = classifyParallel(a=closestFace.bottomEdgeVector, b=v_x_fin_proj_c0)
-                // var ye3_1 = classifyParallel(a=closestFace.bottomEdgeVector, b=v_x_fin_proj_c1)
-                // print "ye3_0: ${ye3_0}"
-                // print "ye3_1: ${ye3_1}"
-                // if (abs(ye3_0) + abs(ye3_1) == 2) { // vx_proj is strictly on the face area but on the bottom edge
-                //     elemGrade = 1
-                //     elemID = closestFace.bottomEdgeID
-                // } else { // vx_proj is strictly on the face
-                //     elemGrade = 2
-                //     elemID = closestFace.faceID
-                // }
             } else if ((ye1 == 1) && (yf1 == 0)) { // vx_proj is strictly in edge 0 (where the edge actually exists with the face)
                 vx_fin_proj = vx_sn_proj
                 elemGrade = 1
@@ -974,7 +949,6 @@ class ParticleMover{
             cross(v_x_corners[1], closestFace.planeUnitNormal),
             cross(v_x_corners[2], closestFace.planeUnitNormal)
         ]
-        //unitize them
         for (i in 0...3) {
             v_x_mids[i] = v_x_mids[i]/v_x_mids[i].norm()
             classificationVectors[i] = classificationVectors[i]/classificationVectors[i].norm()
