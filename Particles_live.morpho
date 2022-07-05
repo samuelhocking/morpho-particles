@@ -660,15 +660,10 @@ class SimpleFace{
     }
 
     getInwardEdgeUnitNormals() {
-        var vects = [
-            -(self.bisectors[2] - self.bisectors[2].inner(self.edgeVectors[0])/self.edgeVectors[0].inner(self.edgeVectors[0])*self.edgeVectors[0]),
-            -(self.bisectors[0] - self.bisectors[0].inner(self.edgeVectors[1])/self.edgeVectors[1].inner(self.edgeVectors[1])*self.edgeVectors[1]),
-            -(self.bisectors[1] - self.bisectors[1].inner(self.edgeVectors[2])/self.edgeVectors[2].inner(self.edgeVectors[2])*self.edgeVectors[2])
-        ]
         return [
-            vects[0]/vects[0].norm(),
-            vects[1]/vects[1].norm(),
-            vects[2]/vects[2].norm()
+            a_remove_b(a=self.edgeUnitVectors[1], b=self.edgeUnitVectors[0], normalize=true),
+            a_remove_b(a=self.edgeUnitVectors[2], b=self.edgeUnitVectors[1], normalize=true),
+            a_remove_b(a=self.edgeUnitVectors[0], b=self.edgeUnitVectors[2], normalize=true)
         ]
     }
 
