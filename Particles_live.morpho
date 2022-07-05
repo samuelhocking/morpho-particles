@@ -565,7 +565,6 @@ class SimpleFace{
         self.edgeUnitVectors = self.getEdgeUnitVectors()
         self.planeUnitNormal = self.getPlaneUnitNormal()
         self.bisectors = self.getBisectors()
-        self.edgeClassificationVectors = self.getEdgeClassificationVectors()
         self.inwardEdgeUnitNormals = self.getInwardEdgeUnitNormals()
         self.vertexAdjEdgeIndices = self.getVertexAdjEdgeIndices()
         self.vertexAdjEdgeVectors = self.getVertexAdjEdgeVectors()
@@ -658,38 +657,6 @@ class SimpleFace{
             0.5*(self.edgeUnitVectors[0] - self.edgeUnitVectors[2]),
             0.5*(self.edgeUnitVectors[1] - self.edgeUnitVectors[0]),
             0.5*(self.edgeUnitVectors[2] - self.edgeUnitVectors[1])
-        ]
-    }
-
-    getEdgeClassificationVectors() {
-        var perpVects = [
-            cross(self.planeUnitNormal, self.bisectors[0]),
-            cross(self.planeUnitNormal, self.bisectors[1]),
-            cross(self.planeUnitNormal, self.bisectors[2])
-        ]
-        var signedPerpVects = []
-        if (classifyInner(a=perpVects[0], b=self.bisectors[2]) == -1) {
-            signedPerpVects.append(-1*perpVects[0])
-        } else {
-            signedPerpVects.append(perpVects[0])
-        }
-
-        if (classifyInner(a=perpVects[1], b=self.bisectors[0]) == -1) {
-            signedPerpVects.append(-1*perpVects[1])
-        } else {
-            signedPerpVects.append(perpVects[1])
-        }
-
-        if (classifyInner(a=perpVects[2], b=self.bisectors[1]) == -1) {
-            signedPerpVects.append(-1*perpVects[2])
-        } else {
-            signedPerpVects.append(perpVects[2])
-        }
-
-        return [
-            [signedPerpVects[0], -signedPerpVects[1]],
-            [signedPerpVects[1], -signedPerpVects[2]],
-            [signedPerpVects[2], -signedPerpVects[0]]
         ]
     }
 
