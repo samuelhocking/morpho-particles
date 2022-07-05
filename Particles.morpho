@@ -109,13 +109,6 @@ fn a_remove_b(a=nil, b=nil, normalize=false) {
     }
 }
 
-// generic blank object
-class GenericObject{
-    init (name=nil) {
-        self.name = name
-    }
-}
-
 //timer class (for testing)
 class timerClass {
     init() {
@@ -965,7 +958,7 @@ class ParticleMover{
         var particleLoc = particleInfoArr[0]
         var particleElemGrade = particleInfoArr[1]
         var particleElemID = particleInfoArr[2]
-        var result = GenericObject()
+        var result = Object()
         result.particleinfo = [
                 particleLoc,
                 particleElemGrade,
@@ -981,7 +974,7 @@ class ParticleMover{
         var particleElemGrade = particleInfoArr[1]
         var particleElemID = particleInfoArr[2]
         var movementVect, endingElemGrade, endingElemID
-        var result = GenericObject()
+        var result = Object()
         var tgtVertexLoc = self.mesh.vertexposition(tgtVertexID)
         // compute allowed movement vector and allowed length to move particle to the tgtVertex
         var allowedMovementVect = tgtVertexLoc - particleLoc
@@ -1010,7 +1003,7 @@ class ParticleMover{
         var particleElemGrade = particleInfoArr[1]
         var particleElemID = particleInfoArr[2]
         var movementVect, endingElemGrade, endingElemID
-        var result = GenericObject()
+        var result = Object()
         // compute allowed movement vector and allowed length to move particle to the tgtEdge
         var tgtEdgeIdx = closestFace.edgeIDtoIndexDict[tgtEdgeID]
         var totalEdgeLengths = closestFace.edgeVectors[0].norm() + closestFace.edgeVectors[1].norm() + closestFace.edgeVectors[2].norm()
