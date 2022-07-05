@@ -569,7 +569,6 @@ class SimpleFace{
         self.vertexAdjEdgeIndices = self.getVertexAdjEdgeIndices()
         self.vertexAdjEdgeVectors = self.getVertexAdjEdgeVectors()
         self.vertexOppEdgeIndices = self.getVertexOppEdgeIndices()
-        self.vertexOppEdgeVectors = self.getVertexOppEdgeVectors()
         self.vertexAdjEdgeVertIndices = self.getVertexAdjEdgeVertIndices()
     }
 
@@ -700,11 +699,6 @@ class SimpleFace{
     getVertexOppEdgeIndices() {
         return [1,2,0]
     }
-
-    getVertexOppEdgeVectors() {
-        return [self.edgeVectors[1], self.edgeVectors[2], self.edgeVectors[0]]
-    }
-
 }
 
 // helper class that generates an array of simpleFace objects for the mesh, indexed by face ID
