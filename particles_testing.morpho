@@ -9,10 +9,8 @@ import kdtree
 import constants
 import implicitmesh
 
-var version = "v17"
-import "Particles_v17.morpho"
-// var version = "live"
-// import "Particles_live.morpho"
+var version = "live"
+import "Particles.morpho"
 import "dictToPython.morpho"
 
 // var numProjPtsRng = 10000..200000:10000

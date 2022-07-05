@@ -5,7 +5,7 @@
 import meshtools
 import plot
 import optimize
-import "Particles_live.morpho"
+import "Particles.morpho"
 
 //Sphere
 // var cube = PolyhedronMesh(
@@ -124,7 +124,7 @@ var mesh = torus
 
 // generate random point cloud
 var ptsArr = []
-var numPts = 10000
+var numPts = 1000
 var xbounds = 2*Matrix([-1,1])
 var ybounds = 2*Matrix([-1,1])
 var zbounds = 2*Matrix([-1,1])
@@ -151,7 +151,7 @@ var e100 = Matrix([1,0,0])
 var e010 = Matrix([0,1,0])
 var e001 = Matrix([0,0,1])
 
-p.move(0.75*e001, quiet=false)
+p.move(1.25*(e100+1.5*e001), quiet=false)
 
 var movedPts = []
 for (x in p.movedPoints) {
