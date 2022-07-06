@@ -704,46 +704,46 @@ class SimpleFaceHelper{
 //projector object (really just a method container)
 //given the index of the closest vertex to a point, creates Star and contains methods to return closest face and closest mesh point
 class StarProjector{
-    init (starHelperObj=nil, centerIndex=nil) {
+    init (starHelperObj) {
         self.starHelperObj = starHelperObj
-        self.centerIndex = centerIndex
-        self.star = self.starHelperObj.starArray[self.centerIndex]
     }
 
-    getClosestFace(x=nil, threshold=1e-12) {
-        var vx = x - self.star.centerLoc
+    getClosestFace(x=nil, centerIndex=nil, threshold=1e-12) {
+        var star = self.starHelperObj.starArray[centerIndex]
+        var vx = x - star.centerLoc
         var yr_arr = []
         var prod_yr_arr = []
         var abs_prod_yr_arr = []
         var faceObj
         var yr1, yr2
         var returnArr
-        if (self.star.numFaces == 1) {
-            faceObj = self.star.faceArray[0]
+        if (star.numFaces == 1) {
+            faceObj = star.faceArray[0]
         } else {
-            for (i in 0...self.star.numFaces) {
-                yr1 = classifyInner(a=vx, b=self.star.faceRegionPlaneNormals[i][0], threshold=threshold)
-                yr2 = classifyInner(a=vx, b=self.star.faceRegionPlaneNormals[i][1], threshold=threshold)
+            for (i in 0...star.numFaces) {
+                yr1 = classifyInner(a=vx, b=star.faceRegionPlaneNormals[i][0], threshold=threshold)
+                yr2 = classifyInner(a=vx, b=star.faceRegionPlaneNormals[i][1], threshold=threshold)
                 yr_arr.append([yr1, yr2])
                 prod_yr_arr.append(yr1*yr2)
                 abs_prod_yr_arr.append(abs(yr1*yr2))
             }
             if (abs(Matrix(abs_prod_yr_arr).sum()) == 0) {
                 faceObj = nil
-            } else for (i in 0...self.star.numFaces) {
+            } else for (i in 0...star.numFaces) {
                 if (yr_arr[i][0] + yr_arr[i][1] == 2) {
-                    faceObj = self.star.faceArray[i]
+                    faceObj = star.faceArray[i]
                 } else if ((prod_yr_arr[i] == 0) && yr_arr[i][0] + yr_arr[i][1] == 1) {
-                    faceObj = self.star.faceArray[i]
+                    faceObj = star.faceArray[i]
                 }
             }
         }
         return faceObj
     }
 
-    getClosestMeshPt(x=nil, threshold=1e-8) {
-        var closestFace = self.getClosestFace(x=x, threshold=threshold)
-        var vx = x - self.star.centerLoc
+    getClosestMeshPt(x=nil, centerIndex=nil, threshold=1e-8) {
+        var star = self.starHelperObj.starArray[centerIndex]
+        var closestFace = self.getClosestFace(x=x, centerIndex=centerIndex, threshold=threshold)
+        var vx = x - star.centerLoc
         var yf1, yf2, ype1, ype2, ye1, ye2, vx_sn_proj, vx_fin_proj, x_fin_proj, elemGrade, elemID
         if (closestFace != nil) {
             var cfsn = closestFace.surfaceNormal
@@ -755,7 +755,7 @@ class StarProjector{
 
             if (yf1 + yf2 == 2) {
                 vx_fin_proj = vx_sn_proj
-                x_fin_proj = self.star.centerLoc + vx_fin_proj
+                x_fin_proj = star.centerLoc + vx_fin_proj
                 var bottom_edge_inward_unit_normal = a_remove_b(a=-closestFace.edgeVectors[0], b=closestFace.bottomEdgeVector, normalize=true)
                 var v_x_fin_proj_c0 = x_fin_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[0])
                 var v_x_fin_proj_c1 = x_fin_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[1])
@@ -791,24 +791,24 @@ class StarProjector{
             } else { // vx_proj is in region closest to star's center vertex
                 vx_fin_proj = Matrix([0,0,0])
                 elemGrade = 0
-                elemID = self.centerIndex
+                elemID = centerIndex
             }
-            x_fin_proj = self.star.centerLoc + vx_fin_proj
+            x_fin_proj = star.centerLoc + vx_fin_proj
         } else {
-            x_fin_proj = self.star.centerLoc
+            x_fin_proj = star.centerLoc
             elemGrade = 0
-            elemID = self.centerIndex
+            elemID = centerIndex
         }
         return [x_fin_proj, elemGrade, elemID]
     }
 }
 
 class ParticleMover{
-    init (simpleFaceHelper, starHelperObj) {
+    init (simpleFaceHelper, starProjectorObj) {
         self.simpleFaceHelper = simpleFaceHelper
         self.faceKDObj = simpleFaceHelper.faceKDObj
         self.edgeKDObj = simpleFaceHelper.edgeKDObj
-        self.starHelperObj = starHelperObj
+        self.starProjectorObj = starProjectorObj
         self.mesh = simpleFaceHelper.mesh
         self.conn = simpleFaceHelper.conn
     }
@@ -886,8 +886,7 @@ class ParticleMover{
                 }
             }
         } else {
-            var sp = StarProjector(starHelperObj=self.starHelperObj, centerIndex=particleElemID)
-            var cf = sp.getClosestFace(x=x)
+            var cf = self.starProjectorObj.getClosestFace(x=x, centerIndex=particleElemID)
             if (cf != nil) {
                 return self.simpleFaceHelper.simpleFaceArr[cf.faceID]
             } else {
@@ -1263,14 +1262,14 @@ class Particles{
         self.edgeKD = EdgeKDHelper(self.meshConn)
         self.starHelper = StarHelper(self.vertexHelper, self.faceKD, self.edgeKD)
         self.simpleFaceHelper = SimpleFaceHelper(self.faceKD, self.edgeKD)
-        self.particleMover = ParticleMover(self.simpleFaceHelper, self.starHelper)
+        self.starProjector = StarProjector(self.starHelper)
+        self.particleMover = ParticleMover(self.simpleFaceHelper, self.starProjector)
     }
     project () {
         var projectedPoints = []
         for (x in self.points) {
             var p_c = self.kdHelper.tree.nearest(x).id
-            var mp_c = StarProjector(starHelperObj = self.starHelper, centerIndex=p_c)
-            projectedPoints.append(mp_c.getClosestMeshPt(x=x))
+            projectedPoints.append(self.starProjector.getClosestMeshPt(x=x, centerIndex=p_c))
         }
         self.projectedPoints = projectedPoints
     }
