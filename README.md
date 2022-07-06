@@ -6,13 +6,6 @@ Particles.morpho is a module to facilitate populating a mesh with point particle
 
 ## Installation
 
-None required except dependent packages:
-- numpy
-- matplotlib
-- pandas
-- copy
-- scipy
-
 Place Particles.morpho in the same directory as the `Morpho` script that requires the module (i.e. the included particles_demo.morpho file) and include the following in the script:
 ```
 import "Particles.morpho"
