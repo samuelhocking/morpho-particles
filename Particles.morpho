@@ -126,6 +126,56 @@ class timerClass {
     }
 }
 
+//connectivity class to store connectivity block matrices for a mesh
+class MeshConnectivity {
+    init (mesh) {
+        self.mesh = mesh
+        self.ve = mesh.connectivitymatrix(0,1)
+        self.vf = mesh.connectivitymatrix(0,2)
+        self.ef = mesh.connectivitymatrix(1,2)
+    }
+}
+
+//enhanced Vertex class, primarily to store neighbors (which are static except with refinement/regularization)
+class Vertex {
+    init (conn, index) {
+        self.mesh = conn.mesh
+        self.conn = conn
+        self.index = index
+        self.neighbors = self.getNeighbors()
+    }
+    //return neighbor vertex indices (order is not spatially informative, likely just ascending from connectivity matrix)
+    getNeighbors() {
+        var incidentEdges = self.conn.ve.transpose().rowindices(self.index)
+        var neighbors = []
+        for (x in incidentEdges) {
+            for (y in self.conn.ve.rowindices(x)) {
+                if (y != self.index) {
+                    neighbors.append(y)
+                }
+            }
+        }
+        return neighbors
+    }
+}
+
+//helper class to store list of Vertex objects for each vertex in the mesh
+class VertexHelper {
+    init (conn) {
+        self.mesh = conn.mesh
+        self.conn = conn
+        self.numVerts = self.mesh.count(0)
+        self.vertexArray = self.getVertexArray()
+    }
+    getVertexArray() {
+        var vertexArray = []
+        for (i in 0...self.numVerts) {
+            vertexArray.append(Vertex(self.conn, i))
+        }
+        return vertexArray
+    }
+}
+
 //kd-tree helper class
 //wraps native KDTree object and helps add and retrieve vertex ids (native only returns location of nearest node)
 class KDHelper {
@@ -217,39 +267,6 @@ class EdgeKDHelper {
             node = self.tree.nearest(Matrix(self.conn.ve.rowindices(i)))
             node.id = i
         }
-    }
-}
-
-//connectivity class to store connectivity block matrices for a mesh
-class MeshConnectivity {
-    init (mesh) {
-        self.mesh = mesh
-        self.ve = mesh.connectivitymatrix(0,1)
-        self.vf = mesh.connectivitymatrix(0,2)
-        self.ef = mesh.connectivitymatrix(1,2)
-    }
-}
-
-//enhanced Vertex class, primarily to store neighbors (which are static except with refinement/regularization)
-class Vertex {
-    init (conn, index) {
-        self.mesh = conn.mesh
-        self.conn = conn
-        self.index = index
-        self.neighbors = self.getNeighbors()
-    }
-    //return neighbor vertex indices (order is not spatially informative, likely just ascending from connectivity matrix)
-    getNeighbors() {
-        var incidentEdges = self.conn.ve.transpose().rowindices(self.index)
-        var neighbors = []
-        for (x in incidentEdges) {
-            for (y in self.conn.ve.rowindices(x)) {
-                if (y != self.index) {
-                    neighbors.append(y)
-                }
-            }
-        }
-        return neighbors
     }
 }
 
@@ -501,23 +518,6 @@ class Star {
             }
         }
         return faceRegionPlaneNormals
-    }
-}
-
-//helper class to store list of Vertex objects for each vertex in the mesh
-class VertexHelper {
-    init (conn) {
-        self.mesh = conn.mesh
-        self.conn = conn
-        self.numVerts = self.mesh.count(0)
-        self.vertexArray = self.getVertexArray()
-    }
-    getVertexArray() {
-        var vertexArray = []
-        for (i in 0...self.numVerts) {
-            vertexArray.append(Vertex(self.conn, i))
-        }
-        return vertexArray
     }
 }
 
@@ -1258,10 +1258,10 @@ class Particles{
         self.points = points
         self.meshConn = MeshConnectivity(self.mesh)
         self.vertexHelper = VertexHelper(self.meshConn)
+        self.kdHelper = KDHelper(self.mesh)
         self.faceKD = FaceKDHelper(self.meshConn)
         self.edgeKD = EdgeKDHelper(self.meshConn)
         self.starHelper = StarHelper(self.vertexHelper, self.faceKD, self.edgeKD)
-        self.kdHelper = KDHelper(self.mesh)
         self.simpleFaceHelper = SimpleFaceHelper(self.faceKD, self.edgeKD)
         self.particleMover = ParticleMover(self.simpleFaceHelper, self.starHelper)
     }
