@@ -1,6 +1,5 @@
 // Demo of particle projection and movement
 // By: Sam Hocking
-// Updated: 7/5/2022
 
 import meshtools
 import plot
