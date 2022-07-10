@@ -752,22 +752,22 @@ class StarProjector{
             yf1 = classifyInner(a=vx_sn_proj, b=closestFace.facePlaneNormals[0], threshold=threshold)
             ye2 = classifyInner(a=vx_sn_proj, b=closestFace.edgeVectors[1], threshold=threshold)
             yf2 = classifyInner(a=vx_sn_proj, b=closestFace.facePlaneNormals[1], threshold=threshold)
-
             if (yf1 + yf2 == 2) {
-                vx_fin_proj = vx_sn_proj
-                x_fin_proj = star.centerLoc + vx_fin_proj
+                var x_sn_proj = star.centerLoc + vx_sn_proj
                 var bottom_edge_inward_unit_normal = a_remove_b(a=-closestFace.edgeVectors[0], b=closestFace.bottomEdgeVector, normalize=true)
-                var v_x_fin_proj_c0 = x_fin_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[0])
-                var v_x_fin_proj_c1 = x_fin_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[1])
-                var yf3 = classifyInner(a=v_x_fin_proj_c0, b=bottom_edge_inward_unit_normal, threshold=threshold)
+                var v_x_sn_proj_c0 = x_sn_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[0])
+                var v_x_sn_proj_c1 = x_sn_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[1])
+                var yf3 = classifyInner(a=v_x_sn_proj_c0, b=bottom_edge_inward_unit_normal, threshold=threshold)
                 if (yf3 == 1) {
+                    vx_fin_proj = vx_sn_proj
                     elemGrade = 2
                     elemID = closestFace.faceID
                 } else if (yf3 == 0) {
+                    vx_fin_proj = vx_sn_proj
                     elemGrade = 1
                     elemID = closestFace.bottomEdgeID
                 } else {
-                    var bottom_adjustment = v_x_fin_proj_c0.inner(bottom_edge_inward_unit_normal)/bottom_edge_inward_unit_normal.inner(bottom_edge_inward_unit_normal)*bottom_edge_inward_unit_normal
+                    var bottom_adjustment = v_x_sn_proj_c0.inner(bottom_edge_inward_unit_normal)/bottom_edge_inward_unit_normal.inner(bottom_edge_inward_unit_normal)*bottom_edge_inward_unit_normal
                     vx_fin_proj = vx_sn_proj - bottom_adjustment
                     elemGrade = 1
                     elemID = closestFace.bottomEdgeID
