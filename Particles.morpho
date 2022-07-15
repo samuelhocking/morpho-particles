@@ -799,7 +799,13 @@ class StarProjector{
             elemGrade = 0
             elemID = centerIndex
         }
-        return [x_fin_proj, elemGrade, elemID]
+        var result = Object()
+        result.particleinfo = [
+            x_fin_proj,
+            elemGrade,
+            elemID
+        ]
+        return result
     }
 }
 
@@ -1252,9 +1258,8 @@ class ParticleMover{
 }
 
 class Particles{
-    init (mesh, points) {
+    init (mesh) {
         self.mesh = mesh
-        self.points = points
         self.meshConn = MeshConnectivity(self.mesh)
         self.vertexHelper = VertexHelper(self.meshConn)
         self.kdHelper = KDHelper(self.mesh)
@@ -1265,27 +1270,100 @@ class Particles{
         self.starProjector = StarProjector(self.starHelper)
         self.particleMover = ParticleMover(self.simpleFaceHelper, self.starProjector)
     }
-    project () {
-        var projectedPoints = []
+
+    getPointLocs () {
+        var pointLocs = []
         for (x in self.points) {
+            pointLocs.append(x.particleinfo[0])
+        }
+        self.pointLocs = pointLocs
+    }
+
+    project (points) {
+        var projectedPoints = []
+        for (x in points) {
             var p_c = self.kdHelper.tree.nearest(x).id
             projectedPoints.append(self.starProjector.getClosestMeshPt(x=x, centerIndex=p_c))
         }
         self.projectedPoints = projectedPoints
+        self.points = projectedPoints
+        self.getPointLocs()
     }
-    move (vector, quiet=true) {
-        var dir = vector/vector.norm()
-        var len = vector.norm()
+    move (force, stepsize=1, quiet=true) {
         var movedPointsInfo = []
         var i = 0
-        for (j in 0...self.projectedPoints.count()) {
-            var x = self.projectedPoints[j]
-            i += 1
-            if (quiet != true) {
-                print "Moving: ${i}/${self.projectedPoints.count()}"
+        if (islist(force)==false) {
+            var vector = force*stepsize
+            var len = vector.norm()
+            var dir
+            if (len > 0) {
+                dir = vector/vector.norm()
+            } else {
+                dir = vector
             }
-            movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len))
+            for (j in 0...self.points.count()) {
+                var x = self.points[j].particleinfo
+                i += 1
+                if (quiet != true) {
+                    print "Moving: ${i}/${self.points.count()}"
+                }
+                movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len))
+            }
+        } else {
+            for (j in 0...self.points.count()) {
+                var vector = stepsize*force[j]
+                var len = vector.norm()
+                var dir
+                if (len > 0) {
+                    dir = vector/vector.norm()
+                } else {
+                    dir = vector
+                }
+                var x = self.points[j].particleinfo
+                i += 1
+                if (quiet != true) {
+                    print "Moving: ${i}/${self.points.count()}"
+                }
+                movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len))
+            }
         }
         self.movedPoints = movedPointsInfo
+        self.points = movedPointsInfo
+        self.getPointLocs()
     }
+}
+
+// functions to replicate pairwise repulsion a la thomson.morpho example
+
+fn calcDistSq(x, y) {
+    var d = x-y
+    return d.inner(d)
+}
+
+fn calcDist(x, y) {
+    var d = x-y
+    return sqrt(calcDistSq(x, y))
+}
+
+fn calcPairwiseForceVectors(particles) {
+    var forceVectors = []
+    var n = particles.count()
+    for (i in 0...n) {
+        var x = particles[i]
+        var forceVector = Matrix([0,0,0])
+        for (j in 0...n) {
+            if (i != j) {
+                var y = particles[j]
+                var dsq = calcDistSq(x, y)
+                if ((dsq > 1e-16)) {
+                    // forceVector += 1/dsq*1/n*(x - y) // vector will point towards x (because we want to sum up vectors that act on x)
+                    // var dir = x - y
+                    var unitdir = (x - y)/(x - y).norm()
+                    forceVector += 1/dsq*unitdir // vector will point towards x (because we want to sum up vectors that act on x)
+                }
+            }
+        }
+        forceVectors.append(forceVector)
+    }
+    return forceVectors
 }
