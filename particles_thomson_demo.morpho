@@ -1,0 +1,130 @@
+// Demo of particle projection and movement
+// By: Sam Hocking
+
+import meshtools
+import plot
+import optimize
+import "Particles.morpho"
+
+//Sphere
+var cube = PolyhedronMesh(
+    [[-0.5,-0.5,-0.5],
+     [-0.5,0.5,-0.5],
+     [0.5,-0.5,-0.5],
+     [0.5,0.5,-0.5],
+     [-0.5,-0.5,0.5],
+     [-0.5,0.5,0.5],
+     [0.5,-0.5,0.5],
+     [0.5,0.5,0.5]],
+    [[0,1,3,2],
+     [0,1,5,4],
+     [2,3,7,6],
+     [1,3,7,5],
+     [0,2,6,4],
+     [4,5,7,6]])
+cube.addgrade(1)
+var problem = OptimizationProblem(cube)
+// surface tension
+var la=Area()
+// volume constraint
+var lv = VolumeEnclosed()
+problem.addenergy(la)
+problem.addconstraint(lv)
+
+var leq=EquiElement()
+var reg = OptimizationProblem(cube)
+reg.addenergy(leq)
+var ropt = ShapeOptimizer(reg, cube)
+
+var opt = ShapeOptimizer(problem, cube)
+opt.stepsize = 0.001
+
+var refmax = 3
+for (refiter in 1..refmax) {
+    for (i in 1..10) {
+        print "-Regularize"
+        ropt.linesearch(3)
+        equiangulate(cube)
+        opt.relax(100)
+    }
+    if (refiter==refmax) break
+    var mr=MeshRefiner([cube])
+    var refmap=mr.refine()
+    for (el in [problem, opt, reg, ropt]) el.update(refmap)
+    cube=refmap[cube]
+}
+var mesh = cube
+
+// generate random point cloud
+var ptsArr = []
+var numPts = 100
+var xbounds = 2*Matrix([-1,1])
+var ybounds = 2*Matrix([-1,1])
+var zbounds = 2*Matrix([-1,1])
+var xrange = xbounds[1] - xbounds[0]
+var yrange = ybounds[1] - ybounds[0]
+var zrange = zbounds[1] - zbounds[0]
+for (i in 1..numPts) {
+    ptsArr.append(Matrix([
+        xbounds[0] + xrange*random(),
+        ybounds[0] + yrange*random(),
+        zbounds[0] + zrange*random()
+        ]))
+}
+
+var p = Particles(mesh)
+p.project(ptsArr)
+
+var projPts = []
+for (x in p.projectedPoints) {
+    projPts.append(x.particleinfo[0])
+}
+
+print "projection done"
+for (j in 0...p.pointLocs.count()) {
+    print p.pointLocs[j].transpose()
+}
+// pointLocs are working here but not below
+var steps = 1000
+for (i in 1..steps) {
+    print "starting step: ${i}"
+    var forceArr = calcPairwiseForceVectors(p.pointLocs)
+    // p.move(forceArr, stepsize=0.1, quiet=false)
+    p.move(forceArr, stepsize=0.01, quiet=true)
+    // take a look at unitizing the vx and vx_proj in the movement steps
+    // investigate why this is happening:
+    // Error 'LstArgs' : Lists must be called with integer dimensions as arguments.
+    // from moveTowardsEdge at line 1018
+    // from movementStep at line 1185
+    // from movementLoop at line 928
+    // from move at line 1317
+    // from global at line 93
+    // for (j in 0...p.pointLocs.count()) {
+    //     print p.pointLocs[j].transpose()
+    // }
+}
+
+var movedPts = []
+for (x in p.movedPoints) {
+    print x.particleinfo[0].transpose()
+    movedPts.append(x.particleinfo[0])
+}
+
+var gMesh = plotmesh(mesh, grade=[2])
+var gCombined = gMesh
+var gProjPt
+for (pt in projPts) {
+    gProjPt = Graphics()
+    gProjPt.display(Sphere(pt, 0.02, color=[255,0,0]))
+    gCombined += gProjPt.clone()
+}
+var gMovedPt
+var i = 0
+for (pt in movedPts) {
+    gMovedPt = Graphics()
+    gMovedPt.display(Sphere(pt, 0.02, color=[0,255,0]))
+    gCombined += gMovedPt.clone()
+    i += 1
+    print "Rendering: ${i}/${movedPts.count()}"
+}
+Show(gCombined)
