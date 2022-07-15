@@ -138,12 +138,12 @@ for (i in 1..numPts) {
         ]))
 }
 
-var p = Particles(mesh, ptsArr)
-p.project()
+var p = Particles(mesh)
+p.project(ptsArr)
 
 var projPts = []
 for (x in p.projectedPoints) {
-    projPts.append(x[0])
+    projPts.append(x.particleinfo[0])
 }
 
 var e100 = Matrix([1,0,0])
@@ -177,18 +177,3 @@ for (pt in movedPts) {
     print "Rendering: ${i}/${movedPts.count()}"
 }
 Show(gCombined)
-
-// test pairwiseforcevectors for a unit square
-var particlesArr = [
-    Matrix([0,0,0]),
-    Matrix([1,0,0]),
-    Matrix([1,1,0]),
-    Matrix([0,1,0])
-]
-
-var forceArr = calcPairwiseForceVectors(particlesArr)
-print "force vectors"
-print forceArr[0].transpose()
-print forceArr[1].transpose()
-print forceArr[2].transpose()
-print forceArr[3].transpose()
