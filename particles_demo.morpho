@@ -126,7 +126,7 @@ var ptsArr = []
 var numPts = 100
 var xbounds = 2*Matrix([-1,1])
 var ybounds = 2*Matrix([-1,1])
-var zbounds = 2*Matrix([-1,-0.5])
+var zbounds = 2*Matrix([-1,1])
 var xrange = xbounds[1] - xbounds[0]
 var yrange = ybounds[1] - ybounds[0]
 var zrange = zbounds[1] - zbounds[0]
@@ -152,7 +152,7 @@ var e001 = Matrix([0,0,1])
 
 // p.move(1.25*(e100+2*e001), quiet=false)
 // p.move(1*(1*e100+1*e010+1*e001), quiet=false)
-p.move(2*(1*e001), quiet=false)
+p.move(1*(1*e001), quiet=false)
 
 var movedPts = []
 for (x in p.movedPoints) {
@@ -177,3 +177,18 @@ for (pt in movedPts) {
     print "Rendering: ${i}/${movedPts.count()}"
 }
 Show(gCombined)
+
+// test pairwiseforcevectors for a unit square
+var particlesArr = [
+    Matrix([0,0,0]),
+    Matrix([1,0,0]),
+    Matrix([1,1,0]),
+    Matrix([0,1,0])
+]
+
+var forceArr = calcPairwiseForceVectors(particlesArr)
+print "force vectors"
+print forceArr[0].transpose()
+print forceArr[1].transpose()
+print forceArr[2].transpose()
+print forceArr[3].transpose()
