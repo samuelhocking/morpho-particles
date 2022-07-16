@@ -6,6 +6,15 @@ import plot
 import optimize
 import "Particles.morpho"
 
+// Sphere
+// var r=1
+// var impl = ImplicitMeshBuilder(fn (x,y,z) x^2+y^2+z^2-r^2)
+// var sphere = impl.build(start=Matrix([1,0,0]), stepsize=0.25, maxiterations=400)
+// sphere.addgrade(0)
+// sphere.addgrade(1)
+// sphere.addgrade(2)
+// var mesh = sphere
+
 //Sphere
 var cube = PolyhedronMesh(
     [[-0.5,-0.5,-0.5],
@@ -57,7 +66,7 @@ var mesh = cube
 
 // generate random point cloud
 var ptsArr = []
-var numPts = 100
+var numPts = 50
 var xbounds = 2*Matrix([-1,1])
 var ybounds = 2*Matrix([-1,1])
 var zbounds = 2*Matrix([-1,1])
@@ -80,44 +89,28 @@ for (x in p.projectedPoints) {
     projPts.append(x.particleinfo[0])
 }
 
-print "projection done"
-for (j in 0...p.pointLocs.count()) {
-    print p.pointLocs[j].transpose()
-}
-// pointLocs are working here but not below
 var steps = 1000
 for (i in 1..steps) {
-    print "starting step: ${i}"
+    if (mod(i,100)==0) {
+        print "starting step: ${i}"
+    }
     var forceArr = calcPairwiseForceVectors(p.pointLocs)
-    // p.move(forceArr, stepsize=0.1, quiet=false)
-    p.move(forceArr, stepsize=0.01, quiet=true)
-    // take a look at unitizing the vx and vx_proj in the movement steps
-    // investigate why this is happening:
-    // Error 'LstArgs' : Lists must be called with integer dimensions as arguments.
-    // from moveTowardsEdge at line 1018
-    // from movementStep at line 1185
-    // from movementLoop at line 928
-    // from move at line 1317
-    // from global at line 93
-    // for (j in 0...p.pointLocs.count()) {
-    //     print p.pointLocs[j].transpose()
-    // }
+    p.move(forceArr, stepsize=0.0001, quiet=true)
 }
 
 var movedPts = []
 for (x in p.movedPoints) {
-    print x.particleinfo[0].transpose()
     movedPts.append(x.particleinfo[0])
 }
 
 var gMesh = plotmesh(mesh, grade=[2])
 var gCombined = gMesh
-var gProjPt
-for (pt in projPts) {
-    gProjPt = Graphics()
-    gProjPt.display(Sphere(pt, 0.02, color=[255,0,0]))
-    gCombined += gProjPt.clone()
-}
+// var gProjPt
+// for (pt in projPts) {
+//     gProjPt = Graphics()
+//     gProjPt.display(Sphere(pt, 0.02, color=[255,0,0]))
+//     gCombined += gProjPt.clone()
+// }
 var gMovedPt
 var i = 0
 for (pt in movedPts) {
