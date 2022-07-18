@@ -15,6 +15,9 @@ Two files are included to demo particle projection and movement:
 - particles_demo.morpho
 - particles_thomson_demo.morpho
 
+Another file is included to facilitate the generation of arbitrary projectable points:
+- RandomPoints.morpho
+
 The other included files are to facilitate testing of the `Particles` module by exporting performance dicts in plaintext to `Python`, forming a `DataFrame`, and plotting with `matplotlib`:
 - dictImportTools.py
 - dictPlotter.py
