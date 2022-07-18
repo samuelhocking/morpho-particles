@@ -1,6 +1,6 @@
 import constants
 
-fn randomRectangle(numPts, xBounds=nil, yBounds=nil, zBounds=nil) {
+fn GenRandomRectangle(numPts, xBounds=nil, yBounds=nil, zBounds=nil) {
     var ptsArr = []
     var params = [
         xBounds,
@@ -29,7 +29,7 @@ fn randomRectangle(numPts, xBounds=nil, yBounds=nil, zBounds=nil) {
     return ptsArr
 }
 
-fn randomBall(r=1, usteps=5, vsteps=5, wsteps=5) {
+fn GenRandomBall(r=1, usteps=5, vsteps=5, wsteps=5) {
     var ptsArr = []
     var x, y, z
     for (var u=0; u<=usteps; u+=1) {
