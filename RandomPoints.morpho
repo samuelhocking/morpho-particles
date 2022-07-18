@@ -1,0 +1,46 @@
+import constants
+
+fn randomRectangle(numPts, xBounds=nil, yBounds=nil, zBounds=nil) {
+    var ptsArr = []
+    var params = [
+        xBounds,
+        yBounds,
+        zBounds
+    ]
+    var bounds = []
+    for (x in params) {
+        if (x != nil) {
+            bounds.append(x)
+        } else {
+            bounds.append([0,0])
+        }
+    }
+    var ranges = []
+    for (x in bounds) {
+        ranges.append(x[1]-x[0])
+    }
+    for (i in 1..numPts) {
+        ptsArr.append(Matrix([
+            bounds[0][0] + ranges[0]*random(),
+            bounds[1][0] + ranges[1]*random(),
+            bounds[2][0] + ranges[2]*random()
+            ]))
+    }
+    return ptsArr
+}
+
+fn randomBall(r=1, usteps=5, vsteps=5, wsteps=5) {
+    var ptsArr = []
+    var x, y, z
+    for (var u=0; u<=usteps; u+=1) {
+        for (var v=0; v<vsteps; v+=1) {
+            for (var w=0; w<=wsteps; w+=1) {
+                x = (w/wsteps*r)*sin(u/usteps*Pi)*cos(v/vsteps*2*Pi)
+                y = (w/wsteps*r)*sin(u/usteps*Pi)*sin(v/vsteps*2*Pi)
+                z = (w/wsteps*r)*cos(u/usteps*Pi)
+                ptsArr.append(Matrix([x,y,z]))
+            }
+        }
+    }
+    return ptsArr
+}
