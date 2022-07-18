@@ -5,6 +5,7 @@ import meshtools
 import plot
 import optimize
 import "Particles.morpho"
+import "RandomPoints.morpho"
 
 //Sphere
 // var cube = PolyhedronMesh(
@@ -122,21 +123,7 @@ torus.addgrade(1)
 var mesh = torus
 
 // generate random point cloud
-var ptsArr = []
-var numPts = 100
-var xbounds = 2*Matrix([-1,1])
-var ybounds = 2*Matrix([-1,1])
-var zbounds = 2*Matrix([-1,1])
-var xrange = xbounds[1] - xbounds[0]
-var yrange = ybounds[1] - ybounds[0]
-var zrange = zbounds[1] - zbounds[0]
-for (i in 1..numPts) {
-    ptsArr.append(Matrix([
-        xbounds[0] + xrange*random(),
-        ybounds[0] + yrange*random(),
-        zbounds[0] + zrange*random()
-        ]))
-}
+var ptsArr = GenRandomRectangle(100, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
 
 var p = Particles(mesh)
 p.project(ptsArr)
@@ -150,8 +137,6 @@ var e100 = Matrix([1,0,0])
 var e010 = Matrix([0,1,0])
 var e001 = Matrix([0,0,1])
 
-// p.move(1.25*(e100+2*e001), quiet=false)
-// p.move(1*(1*e100+1*e010+1*e001), quiet=false)
 p.move(1*(1*e001), quiet=true)
 
 var movedPts = []
