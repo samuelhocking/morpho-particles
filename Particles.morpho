@@ -33,8 +33,6 @@
 //      re-worked edge classification logic again
 //      added re-projection step for closest mesh point calculation in case point is beyond the bottom edge of the face (only applicable with very obtuse angle at star center vertex)
 // v18: trimm unnecessary code
-//To-do:
-//      
 
 import meshtools
 import plot
