@@ -1,38 +1,5 @@
 // Script to project arbitary points in R^3 onto mesh surface, and moved them on the surface
 // By: Sam Hocking
-// Updated: 7/5/2022
-// Changelog:
-// v1:  first version with module separated from working script
-// v2:  removed vertex position from Vertex object
-//      Face and Star objects query positions on construction
-// v3:  started changing getClosestFace to return faceObj and faceIdx (need to finish faceIdx)
-// v4:  substituted Star object to incorporate face-driven clustering vs. vertex driven -> thought it would allow non-cyclical stars to work (it didn't)
-// v5:  revised vertex-driven clustering (v3-type) to control for cyclical or acyclical stars
-// v6:  added list equality check?
-// v7:  switched getFaceIDs and getEdgeIDs from inefficient set comparison operations [which looked like O(n^2) to abstract kd-tree using sorted vertex indices as spatial points
-// v8:  enhanced getclosestmeshpt return value to include loc, grade, id
-// v9:  swapped getFaceIDs and getEdgeIDs from kd-tree to simple dictionaries (array keys work, matrix keys do not)
-// v10: reverted to kd-tree from dict (dict uses exact object matching, not object contents, which doesn't work)
-//      added simpleFace and simpleFaceHelper classes (groundwork for particle movement)
-//      added beginning of ParticleMover class
-// v11: added notes to simpleFace and simpleFaceHelper classes
-//      added inward facing unit edge normal vectors to simpleFace class (NOTE: worth thinking about for Star or Face objects [they work fine for now])
-//      added vertexIDtoIndex and edgeIDtoIndex dicts to simpleFace to return the simpleFace-based array index for an element id number
-//      added getClosestFace method to ParticleMover class
-//      added movementStep and movementLoop methods to ParticleMover class
-// v12: worked on some movement step bugs
-// v13: reorganized moveTowardsVertex, moveTowardsEdge, and the movementStep methods (have not removed old ones -> v14)
-// v14: misc bug fixes
-//      reverted getClosestFace logic for grade 0 to return pure result of StarProjector (want a non-nil result even if vector is off the face)
-// v15: revise logic for when vx_proj is perpendicular to edge classification vectors (generalize for non-right triangles) and add to case when grade=2 (already in place for grade=1)
-//      movement logic should (!) be finalized. begin testing on non-right triangle flat mesh, non-flat sheet, and solid meshes
-// v16: revise edgeClassificationVector calculation - needs to vary based on particleLoc
-//      works in testing on a variety of meshes
-// v17: removed old edge classification perpendicularity checks
-//      re-numbered logic branches
-//      re-worked edge classification logic again
-//      added re-projection step for closest mesh point calculation in case point is beyond the bottom edge of the face (only applicable with very obtuse angle at star center vertex)
-// v18: trimm unnecessary code
 
 import meshtools
 import plot
