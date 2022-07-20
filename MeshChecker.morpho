@@ -345,5 +345,12 @@ for (f in faces) mb.addface(f)
 var tetra = mb.build()
 var mesh = tetra
 
+// Implicit Mesh Sphere
+// var r=1
+// var impl = ImplicitMeshBuilder(fn (x,y,z) x^2+y^2+z^2-r^2)
+// var sphere = impl.build(start=Matrix([1,0,0]), stepsize=0.25, maxiterations=400)
+// sphere.addgrade(1)
+// var mesh = sphere
+
 var mc = MeshChecker(mesh)
 mc.getMeshReport(detail=2)
