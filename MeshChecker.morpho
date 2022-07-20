@@ -1,0 +1,349 @@
+// MeshChecker.morpho
+// Class to check if mesh is properly formed or has duplicate elements, zero length edges, or zero area faces
+// By: Sam Hocking
+
+fn cross(a, b) {
+    return Matrix([ a[1]*b[2]-a[2]*b[1],
+                    a[2]*b[0]-a[0]*b[2],
+                    a[0]*b[1]-a[1]*b[0] ])
+}
+
+class MeshChecker {
+    init (mesh) {
+        self.mesh = mesh
+        self.numElems = [
+            self.mesh.count(0),
+            self.mesh.count(1),
+            self.mesh.count(2)
+        ]
+        self.veConn = self.mesh.connectivitymatrix(0,1)
+        self.vfConn = self.mesh.connectivitymatrix(0,2)
+        self.efConn = self.mesh.connectivitymatrix(1,2)
+        self.vertIndices = [0...self.numElems[0]:1]
+        self.edgeIndices = [0...self.numElems[1]:1]
+        self.faceIndices = [0...self.numElems[2]:1]
+        self.checkEdgeConnectivity()
+        self.checkFaceConnectivity()
+        self.dupeVerts = self.getDupeVertices()
+        self.dupeVertsDict = self.getDupeVertexDict()
+        self.adjEdgeVertices = self.getAdjEdgeVertices()
+        self.adjFaceVertices = self.getAdjFaceVertices()
+        self.dupeEdges = self.getDupeEdges()
+        self.dupeFaces = self.getDupeFaces()
+        self.edgeLengths = self.getEdgeLengths()
+        self.faceAreas = self.getFaceAreas()
+    }
+
+    // check for bad edges with less than two connected vertices
+    // (purely duplicate vertices will show up as only a single "1")
+    // removes bad edge indices from the edgeIndices object so we don't do further checks on them
+    checkEdgeConnectivity() {
+        self.badEdges = []
+        for (x in 0...self.veConn.dimensions()[1]) {
+            if (self.veConn.rowindices(x).count() < 2) {
+                self.badEdges.append(x)
+                self.edgeIndices.remove(x)
+            }
+        }
+    }
+
+    // check for bad faces with less than three connected vertices
+    // (purely duplicate vertices will show up as only a single "1")
+    // removes bad face indices from the faceIndices object so we don't do further checks on them
+    checkFaceConnectivity() {
+        self.badFaces = []
+        for (x in 0...self.vfConn.dimensions()[1]) {
+            if (self.vfConn.rowindices(x).count() < 3) {
+                self.badFaces.append(x)
+                self.faceIndices.remove(x)
+            }
+        }
+        // for (x in 0...self.efConn.dimensions()[1]) {
+        //     if (self.efConn.rowindices(x).count() < 3) {
+        //         self.badFaces.append(x)
+        //         self.faceIndices.remove(x)
+        //     }
+        // }
+    }
+
+    // returns list of lists of duplicate vertices (based on position)
+    getDupeVertices() {
+        var dupeVerts = []
+        var skipList = []
+        for (i in self.vertIndices) {
+            var dupeArr = [i]
+            for (j in self.vertIndices) {
+                if (i != j) {
+                    if (skipList.ismember(j) == false) {
+                        if ((self.mesh.vertexposition(i) - self.mesh.vertexposition(j)).norm() == 0) {
+                            dupeArr.append(j)
+                            skipList.append(j)
+                        }
+                    }
+                }
+            }
+            if (dupeArr.count() > 1) {
+                dupeVerts.append(dupeArr)
+                skipList.append(i)
+            }
+        }
+        return dupeVerts
+    }
+    
+    // returns dictionary that converts the regular vertex indices to duplicate-equivalent indices
+    // keys are regular indices
+    // if the vertex has no duplicate, the value is its regular index
+    // if the vertex has a duplicate, the value is the first index in the list of equivalent vertices
+    getDupeVertexDict() {
+        var dict = Dictionary()
+        var indices = self.vertIndices.clone()
+        if (self.dupeVerts.count() > 0) {
+            for (x in self.dupeVerts) {
+                for (y in x) {
+                    dict[y] = x[0]
+                    indices.remove(y)
+                }
+            }
+        }
+        if (indices.count() > 0) {
+            for (x in indices) {
+                dict[x] = x
+            }
+        }
+        return dict
+    }
+
+    // returns adjusted edge vertices, accounting for duplicate vertices
+    // lets us check for duplicate edges
+    getAdjEdgeVertices() {
+        var edges = []
+        for (i in self.edgeIndices) {
+            var rawCoords = self.veConn.rowindices(i)
+            var adjCoords = [
+                self.dupeVertsDict[rawCoords[0]],
+                self.dupeVertsDict[rawCoords[1]]
+            ]
+            adjCoords.sort()
+            edges.append(adjCoords)
+        }
+        return edges
+    }
+
+    // returns adjusted face vertices, accounting for duplicate vertices
+    // lets us check for duplicate faces
+    getAdjFaceVertices() {
+        var faces = []
+        for (i in self.faceIndices) {
+            var rawCoords = self.vfConn.rowindices(i)
+            var adjCoords = [
+                self.dupeVertsDict[rawCoords[0]],
+                self.dupeVertsDict[rawCoords[1]],
+                self.dupeVertsDict[rawCoords[2]]
+            ]
+            adjCoords.sort()
+            faces.append(adjCoords)
+        }
+        return faces
+    }  
+
+    // returns list of lists of duplicate edges (based on adjusted vertex indices)
+    getDupeEdges() {
+        var dupeEdges = []
+        var skipList = []
+        for (i in 0...self.edgeIndices.count()) {
+            var x = self.edgeIndices[i]
+            var dupeArr = [x]
+            for (j in 0...self.edgeIndices.count()) {
+                var y = self.edgeIndices[j]
+                if (x != y) {
+                    if (skipList.ismember(y) == false) {
+                        if ((Matrix(self.adjEdgeVertices[i]) - Matrix(self.adjEdgeVertices[j])).norm() == 0) {
+                            dupeArr.append(y)
+                            skipList.append(y)
+                        }                        
+                    }
+                }
+            }
+            if (dupeArr.count() > 1) {
+                dupeEdges.append(dupeArr)
+                skipList.append(x)
+            }
+        }
+        return dupeEdges
+    }
+
+    // returns list of lists of duplicate faces (based on adjusted vertex indices)
+    getDupeFaces() {
+        var dupeFaces = []
+        var skipList = []
+        for (i in 0...self.faceIndices.count()) {
+            var x = self.faceIndices[i]
+            var dupeArr = [x]
+            for (j in 0...self.faceIndices.count()) {
+                var y = self.faceIndices[j]
+                if (x != y) {
+                    if (skipList.ismember(y) == false) {
+                        if ((Matrix(self.adjFaceVertices[i]) - Matrix(self.adjFaceVertices[j])).norm() == 0) {
+                            dupeArr.append(y)
+                            skipList.append(y)
+                        }                        
+                    }
+                }
+            }
+            if (dupeArr.count() > 1) {
+                dupeFaces.append(dupeArr)
+                skipList.append(x)
+            }
+        }
+        return dupeFaces
+    }
+
+    // returns list of edge lengths
+    getEdgeLengths() {
+        var lengths = []
+        for (i in 0...self.edgeIndices.count()) {
+            var vertices = self.adjEdgeVertices[i]
+            lengths.append((self.mesh.vertexposition(vertices[0]) - self.mesh.vertexposition(vertices[1])).norm())
+        }
+        return lengths
+    }
+
+    // returns list of face areas
+    getFaceAreas() {
+        var areas = []
+        for (i in 0...self.faceIndices.count()) {
+            var vertices = self.adjFaceVertices[i]
+            var vectors = [
+                self.mesh.vertexposition(vertices[1])-self.mesh.vertexposition(vertices[0]),
+                self.mesh.vertexposition(vertices[2])-self.mesh.vertexposition(vertices[0])
+            ]
+            areas.append(1/2*(cross(vectors[0],vectors[1]).norm()))
+        }
+        return areas
+    }
+
+    // returns report on mesh "quality"
+    // detail=0 prints "pass" or "fail"
+    // detail=1 prints constituent test results as well
+    // detail=2 prints failing mesh elements as well
+    // all detail levels also return true for "pass" or false for "fail"
+    getMeshReport(detail=0) {
+        var dupeVertsCount = 0
+        var dupeEdgesCount = 0
+        var dupeFacesCount = 0
+        var zeroLenEdgeCount = 0
+        var zeroAreaFaceCount = 0
+        var zeroLenEdges = []
+        var zeroAreaFaces = []
+        if (self.dupeVerts.count() == 0) {
+            dupeVertsCount = 0
+        } else {
+            for (x in self.dupeVerts) dupeVertsCount += x.count()
+        }
+        if (self.dupeEdges.count() == 0) {
+            dupeEdgesCount = 0
+        } else {
+            for (x in self.dupeEdges) dupeEdgesCount += x.count()
+        }
+        if (self.dupeFaces.count() == 0) {
+            dupeFacesCount = 0
+        } else {
+            for (x in self.dupeFaces) dupeFacesCount += x.count()
+        }
+        if (self.edgeLengths.count() == 0) {
+            zeroLenEdgeCount = 0
+        } else {
+            for (i in 0...self.edgeIndices.count()) {
+                if (self.edgeLengths[i] == 0) {
+                    zeroLenEdgeCount += 1
+                    zeroLenEdges.append(self.edgeIndices[i])
+                }
+            }
+        }
+        if (self.faceAreas.count() == 0) {
+            zeroAreaFaceCount = 0
+        } else {
+            for (i in 0...self.faceIndices.count()) {
+                if (self.faceAreas[i] == 0) {
+                    zeroAreaFaceCount += 1
+                    zeroAreaFaces.append(self.faceIndices[i])
+                }
+            }
+        }
+        print "mesh report"
+        print "--------------------------"
+        if (
+            (self.badEdges.count() == 0) &&
+            (self.badFaces.count() == 0) &&
+            (dupeVertsCount == 0) &&
+            (dupeEdgesCount == 0) &&
+            (dupeFacesCount == 0) &&
+            (zeroLenEdgeCount == 0) &&
+            (zeroAreaFaceCount == 0)
+        ) {
+            var testResult = true
+            print "pass"
+        } else {
+            var testResult = false
+            print "fail"
+        }
+        if (detail >= 1) {
+            print "--------------------------"
+            print "bad edges         : ${self.badEdges.count()}"
+            if ((detail >= 2) && (self.badEdges.count() > 0)) {
+                print "   ${self.badEdges}"
+            }
+            print "bad faces         : ${self.badFaces.count()}"
+            if ((detail >= 2) && (self.badFaces.count() > 0)) {
+                print "   ${self.badFaces}"
+            }
+            print "dupe vertices     : ${dupeVertsCount}"
+            if ((detail >= 2) && (dupeVertsCount > 0)) {
+                for (x in self.dupeVerts) {
+                    print "   ${x}"
+                }
+            }
+            print "dupe edges        : ${dupeEdgesCount}"
+            if ((detail >= 2) && (dupeEdgesCount > 0)) {
+                for (x in self.dupeEdges) {
+                    print "   ${x}"
+                }
+            }
+            print "dupe faces        : ${dupeFacesCount}"
+            if ((detail >= 2) && (dupeFacesCount > 0)) {
+                for (x in self.dupeFaces) {
+                    print "   ${x}"
+                }
+            }
+            print "zero length edges : ${zeroLenEdgeCount}"
+            if ((detail >= 2) && (zeroLenEdgeCount > 0)) {
+                print "   ${zeroLenEdges}"
+            }
+            print "zero area faces   : ${zeroAreaFaceCount}"
+            if ((detail >= 2) && (zeroAreaFaceCount > 0)) {
+                print "   ${zeroAreaFaces}"
+            }
+        }
+        print "--------------------------"
+        return testResult
+    }
+}
+
+// testing & examples
+import meshtools
+import implicitmesh
+import plot
+
+//Bad Mesh
+var verts = [[0, 0.57735027, -0.25],[-0.5,-0.28867513,-0.25],[0.5,-0.28867513,-0.25],[0,0,0.5],[0,0,0.5],[0,0,0.5],[0, 0.57735027, -0.25]]
+var edges = [[0,1],[0,2],[1,2],[0,3],[1,3],[2,3],[0,1],[2,2]]
+var faces = [[0,1,2],[0,1,3],[1,2,3],[0,2,3],[3,4,5],[3,0,1],[3,3,3]]
+var mb = MeshBuilder()
+for (v in verts) mb.addvertex(v)
+for (e in edges) mb.addedge(e)
+for (f in faces) mb.addface(f)
+var tetra = mb.build()
+var mesh = tetra
+
+var mc = MeshChecker(mesh)
+mc.getMeshReport(detail=2)
