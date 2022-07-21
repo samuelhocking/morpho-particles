@@ -7,74 +7,8 @@ import optimize
 import kdtree
 import constants
 import implicitmesh
-
-//function to return set intersection of two lists
-fn intersection(a, b) {
-    var c
-    var d = []
-    if (a.count()<b.count()) {
-        c = a
-    } else {
-        c = b
-    }
-    for (x in c) {
-        if (a.ismember(x) && b.ismember(x)) {
-            if (d.ismember(x)==false) d.append(x)
-        }
-    }
-    return d
-}
-
-//function to return cross product of a and b vectors
-fn cross(a, b) {
-    return Matrix([ a[1]*b[2]-a[2]*b[1],
-                    a[2]*b[0]-a[0]*b[2],
-                    a[0]*b[1]-a[1]*b[0] ])
-}
-
-//SVM-style classification function: returns sign of dot product of a and b vectors, given some numerical tolerance threshold
-fn classifyInner(a=nil, b=nil, threshold=1e-8) {
-    var dot = a.inner(b)/(a.norm()*b.norm())
-    if (dot > threshold) {
-        return 1
-    } else if (abs(dot) <= threshold) {
-        return 0
-    } else {
-        return -1
-    }
-}
-
-// wrapped version of classifyInner that returns only 1 or -1 (no 0)
-fn hardClassifyInner(a=nil, b=nil, threshold=1e-8) {
-    var res = classifyInner(a=a, b=b, threshold=threshold)
-    if (res >= 0) {
-        return 1
-    } else {
-        return -1
-    }
-}
-
-// returns 1 if a and b vectors are parallel in the same direction, -1 if parallel in opposite directions, and 0 otherwise
-fn classifyParallel(a=nil, b=nil, threshold=1e-8) {
-    var dot = a.inner(b)/(a.norm()*b.norm())
-    if (dot > 1-threshold) {
-        return 1
-    } else if (dot < -1+threshold) {
-        return -1
-    } else {
-        return 0
-    }
-}
-
-//"reverse" projection: remove projection of a onto b from a. returns a vector perpendicular to b, in the same plane as a
-fn a_remove_b(a=nil, b=nil, normalize=false) {
-    var v = a - a.inner(b)/b.inner(b)*b
-    if ((normalize == true) && (v.norm()>0)) {
-        return v/v.norm()
-    } else {
-        return v
-    }
-}
+import "DictlikeSetOps.morpho"
+import "LinAlgTools.morpho"
 
 //timer class (for testing)
 class timerClass {
@@ -343,7 +277,7 @@ class Star {
         for (x in self.satellites) {
             xSat = self.vertexHelperObj.vertexArray[x]
             xSatNeighbors = xSat.neighbors
-            satNeighbors = intersection(xSatNeighbors, self.satellites)
+            satNeighbors = dictlikeIntersection(xSatNeighbors, self.satellites)
             self.neighbCountArr.append(satNeighbors.count())
         }
         var sortKey = self.neighbCountArr.order()
@@ -371,7 +305,7 @@ class Star {
             stack.remove(x)
             xVertex = self.vertexHelperObj.vertexArray[x]
             xNeighbs = xVertex.neighbors
-            sharedNeighbors = intersection(stack, xNeighbs)
+            sharedNeighbors = dictlikeIntersection(stack, xNeighbs)
             i += 1
         }
         return orderedSatellites
@@ -383,7 +317,6 @@ class Star {
         var satPos, vect
         for (idx in self.orderedSatellites) {
             satPos = self.mesh.vertexposition(idx)
-            // satPos = self.vertexHelperObj.vertexArray[idx].position
             vect = satPos - centerPos
             spokes.append(vect)
         }
@@ -706,42 +639,27 @@ class StarProjector{
     }
 
     getClosestMeshPt(x=nil, centerIndex=nil, threshold=1e-8) {
-        // print "centerIndex: ${centerIndex}"
         var star = self.starHelperObj.starArray[centerIndex]
-        // print "centerLoc: ${[star.centerLoc[0],star.centerLoc[1],star.centerLoc[2]]}"
         var closestFace = self.getClosestFace(x=x, centerIndex=centerIndex, threshold=threshold)
         var cornerLocs = [
             self.starHelperObj.mesh.vertexposition(closestFace.corners[0]),
             self.starHelperObj.mesh.vertexposition(closestFace.corners[1])
         ]
-        // print "closest face vertex Locs"
-        // print "${[cornerLocs[0][0],cornerLocs[0][1],cornerLocs[0][2]]}"
-        // print "${[cornerLocs[1][0],cornerLocs[1][1],cornerLocs[1][2]]}"
         var vx = x - star.centerLoc
         var yf1, yf2, ype1, ype2, ye1, ye2, vx_sn_proj, vx_fin_proj, x_fin_proj, elemGrade, elemID
         if (closestFace != nil) {
             var cfsn = closestFace.surfaceNormal
-            var vx_sn_proj = vx - vx.inner(cfsn)/cfsn.inner(cfsn)*cfsn
+            var vx_sn_proj = a_remove_b(a=vx, b=cfsn)
             ye1 = classifyInner(a=vx_sn_proj, b=closestFace.edgeVectors[0], threshold=threshold)
             yf1 = classifyInner(a=vx_sn_proj, b=closestFace.facePlaneNormals[0], threshold=threshold)
             ye2 = classifyInner(a=vx_sn_proj, b=closestFace.edgeVectors[1], threshold=threshold)
             yf2 = classifyInner(a=vx_sn_proj, b=closestFace.facePlaneNormals[1], threshold=threshold)
-            // print "facePlaneNormals"
-            // print "${[closestFace.facePlaneNormals[0][0],closestFace.facePlaneNormals[0][1],closestFace.facePlaneNormals[0][2]]}"
-            // print "${[closestFace.facePlaneNormals[1][0],closestFace.facePlaneNormals[1][1],closestFace.facePlaneNormals[1][2]]}"
-            // print "ye1: ${ye1}"
-            // print "yf1: ${yf1}"
-            // print "ye2: ${ye2}"
-            // print "yf2: ${yf2}"
             if (yf1 + yf2 == 2) {
                 var x_sn_proj = star.centerLoc + vx_sn_proj
-                // print "x_sn_proj"
-                // print "${[x_sn_proj[0],x_sn_proj[1],x_sn_proj[2]]}"
                 var bottom_edge_inward_unit_normal = a_remove_b(a=-closestFace.edgeVectors[0], b=closestFace.bottomEdgeVector, normalize=true)
                 var v_x_sn_proj_c0 = x_sn_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[0])
                 var v_x_sn_proj_c1 = x_sn_proj - self.starHelperObj.mesh.vertexposition(closestFace.corners[1])
                 var yf3 = classifyInner(a=v_x_sn_proj_c0, b=bottom_edge_inward_unit_normal, threshold=threshold)
-                // print "yf3: ${yf3}"
                 if (yf3 == 1) {
                     vx_fin_proj = vx_sn_proj
                     elemGrade = 2
@@ -751,7 +669,7 @@ class StarProjector{
                     elemGrade = 1
                     elemID = closestFace.bottomEdgeID
                 } else {
-                    var bottom_adjustment = v_x_sn_proj_c0.inner(bottom_edge_inward_unit_normal)/bottom_edge_inward_unit_normal.inner(bottom_edge_inward_unit_normal)*bottom_edge_inward_unit_normal
+                    var bottom_adjustment = a_proj_b(a=v_x_sn_proj_c0, b=bottom_edge_inward_unit_normal)
                     vx_fin_proj = vx_sn_proj - bottom_adjustment
                     elemGrade = 1
                     elemID = closestFace.bottomEdgeID
@@ -765,11 +683,11 @@ class StarProjector{
                 elemGrade = 1
                 elemID = closestFace.edgeIDs[1]
             } else if ((ye1 == 1) && (yf1 == -1)) { // vx_proj is outside face, must be projected back to edge 0
-                vx_fin_proj = vx_sn_proj - vx_sn_proj.inner(closestFace.facePlaneNormals[0])/closestFace.facePlaneNormals[0].inner(closestFace.facePlaneNormals[0]) * closestFace.facePlaneNormals[0]
+                vx_fin_proj = a_remove_b(a=vx_sn_proj, b=closestFace.facePlaneNormals[0])
                 elemGrade = 1
                 elemID = closestFace.edgeIDs[0]
             } else if ((ye2 == 1) && (yf2 == -1)) { // vx_proj is outside face, must be projected back to edge 1
-                vx_fin_proj = vx_sn_proj - vx_sn_proj.inner(closestFace.facePlaneNormals[1])/closestFace.facePlaneNormals[1].inner(closestFace.facePlaneNormals[1]) * closestFace.facePlaneNormals[1]
+                vx_fin_proj = a_remove_b(a=vx_sn_proj, b=closestFace.facePlaneNormals[1])
                 elemGrade = 1
                 elemID = closestFace.edgeIDs[1]            
             } else { // vx_proj is in region closest to star's center vertex
@@ -948,10 +866,6 @@ class ParticleMover{
             v_x_mids[i] = v_x_mids[i]/v_x_mids[i].norm()
             classificationVectors[i] = classificationVectors[i]/classificationVectors[i].norm()
         }
-        // print "raw classification vectors"
-        // print classificationVectors[0].transpose()
-        // print classificationVectors[1].transpose()
-        // print classificationVectors[2].transpose()
         var edgeClassificationVectors = [
             [classificationVectors[0]*hardClassifyInner(a=classificationVectors[0], b=v_x_mids[0]), classificationVectors[1]*hardClassifyInner(a=classificationVectors[1], b=v_x_mids[0])],
             [classificationVectors[1]*hardClassifyInner(a=classificationVectors[1], b=v_x_mids[1]), classificationVectors[2]*hardClassifyInner(a=classificationVectors[2], b=v_x_mids[1])],
@@ -977,8 +891,6 @@ class ParticleMover{
 
     moveTowardsVertex(particleInfoArr, dir, len, vx_proj, tgtVertexID, pathElemGrade, pathElemID) {
         var unit_vx_proj = vx_proj/vx_proj.norm()
-        // print "unit_vx_proj"
-        // print unit_vx_proj.transpose()
         var particleLoc = particleInfoArr[0]
         var particleElemGrade = particleInfoArr[1]
         var particleElemID = particleInfoArr[2]
@@ -1013,13 +925,6 @@ class ParticleMover{
         var particleElemID = particleInfoArr[2]
         var movementVect, endingElemGrade, endingElemID
         var result = Object()
-        // print "moveTowardsEdge info"
-        // print dir.transpose()
-        // print len
-        // print vx_proj.transpose()
-        // print vx_proj.norm()
-        // print tgtEdgeID
-        // compute allowed movement vector and allowed length to move particle to the tgtEdge
         var unit_vx_proj = vx_proj/vx_proj.norm()
         var tgtEdgeIdx = closestFace.edgeIDtoIndexDict[tgtEdgeID]
         var totalEdgeLengths = closestFace.edgeVectors[0].norm() + closestFace.edgeVectors[1].norm() + closestFace.edgeVectors[2].norm()
@@ -1028,7 +933,7 @@ class ParticleMover{
         var tgtEdgeVertexIDs = closestFace.edgeVertexIDs[tgtEdgeIdx]
         var tgtEdgeVertexLocs = closestFace.edgeVertexLocs[tgtEdgeIdx]
         var v_corner_x = particleLoc - tgtEdgeVertexLocs[0]
-        var v_corner_x_proj_edge = v_corner_x.inner(tgtEdgeVect)/tgtEdgeVect.inner(tgtEdgeVect)*tgtEdgeVect
+        var v_corner_x_proj_edge = a_proj_b(a=v_corner_x, b=tgtEdgeVect)
         var p_e = tgtEdgeVertexLocs[0] + v_corner_x_proj_edge
         var v_x_p_e = v_corner_x_proj_edge - v_corner_x
         var long_v_x_proj_e_normal, scaleFactor, scaled_vx_proj
@@ -1037,7 +942,7 @@ class ParticleMover{
             scaleFactor = 0
             scaled_vx_proj = Matrix([0,0,0])
         } else {
-            long_v_x_proj_e_normal = long_vx_proj.inner(v_x_p_e)/v_x_p_e.inner(v_x_p_e)*v_x_p_e
+            long_v_x_proj_e_normal = a_proj_b(a=long_vx_proj, b=v_x_p_e)
             scaleFactor = long_v_x_proj_e_normal.norm()/v_x_p_e.norm()
             scaled_vx_proj = 1/scaleFactor * long_vx_proj
         }
@@ -1045,7 +950,6 @@ class ParticleMover{
         var allowedLen = allowedMovementVect.norm()
         if (allowedLen > len) {
             movementVect = len*unit_vx_proj
-            // endingElemGrade = particleElemGrade
             endingElemGrade = 2
             endingElemID = closestFace.id
         } else {
@@ -1096,7 +1000,7 @@ class ParticleMover{
                     }
                 }
                 if (tgtVertexID != nil) { // SECTION 1B1: VX_PROJ heading straight at a vertex
-                    // printTag = "1B1"
+                    printTag = "1B1"
                     result = self.moveTowardsVertex(particleInfoArr, dir, len, vx_proj, tgtVertexID, particleElemGrade, particleElemID)
                 } else { // SECTION 1B2: VX_PROJ heading at an edge
                     var edgeClassificationVectors = self.getEdgeClassificationUnitVectors(particleLoc, closestFace)
@@ -1133,7 +1037,7 @@ class ParticleMover{
                     self.mesh.vertexposition(edgeVertexIDs[1])
                 ]
                 var edgeVector = edgeVertexLocs[1] - edgeVertexLocs[0]
-                var vx_proj = vx.inner(edgeVector)/edgeVector.inner(edgeVector)*edgeVector
+                var vx_proj = a_proj_b(a=vx, b=edgeVector)
                 if (vx_proj.norm() < 1e-16) { // SECTION 2A1: ||VX_PROJ|| = 0
                     printTag = "2A1"
                     result = self.moveNowhere(particleInfoArr, dir)
@@ -1155,16 +1059,7 @@ class ParticleMover{
                     result = self.moveNowhere(particleInfoArr, dir)
                 } else { // SECTION 2B2: ||VX_PROJ|| > 0
                     var unit_vx_proj = vx_proj/vx_proj.norm()
-                    // print "closestFace id: ${closestFace.id}"
-                    // print "vertex Locs"
-                    // print "${[closestFace.vertexLocs[0][0],closestFace.vertexLocs[0][1],closestFace.vertexLocs[0][2]]}"
-                    // print "${[closestFace.vertexLocs[1][0],closestFace.vertexLocs[1][1],closestFace.vertexLocs[1][2]]}"
-                    // print "${[closestFace.vertexLocs[2][0],closestFace.vertexLocs[2][1],closestFace.vertexLocs[2][2]]}"
-                    // print "edge IDs"
-                    // print closestFace.edgeIDs 
                     var edgeIdx = closestFace.edgeIDtoIndexDict[particleElemID]
-                    // print "edgeIdx"
-                    // print edgeIdx
                     var oppVertexIdx
                     if (edgeIdx == 0) {
                         oppVertexIdx = 2
@@ -1176,39 +1071,17 @@ class ParticleMover{
                     var oppVertexID = closestFace.vertexIDs[oppVertexIdx]
                     var oppVertexLoc = self.mesh.vertexposition(oppVertexID)
                     var vx_oppVertex = oppVertexLoc - particleLoc
-                    // print "unit vx_oppVertex"
-                    // print (vx_oppVertex/vx_oppVertex.norm()).transpose()
-                    // print "unit vx_proj"
-                    // print unit_vx_proj.transpose()
-                    // print "dot"
-                    // print unit_vx_proj.inner((vx_oppVertex/vx_oppVertex.norm()))
-                    // print "starting edge inward unit normal"
-                    // print closestFace.inwardEdgeUnitNormals[edgeIdx].transpose()
-                    // print "dot"
-                    // print unit_vx_proj.inner(closestFace.inwardEdgeUnitNormals[edgeIdx])
                     if (classifyParallel(a=unit_vx_proj, b=vx_oppVertex) == 1) { // SECTION 2B2a: vx_proj is heading straight towards the vertex opposite the starting edge
                         var tgtVertexID = oppVertexID
                         printTag = "2B2a"
                         result = self.moveTowardsVertex(particleInfoArr, dir, len, vx_proj, tgtVertexID, 2, closestFace.id)
                     } else { // SECTION 2B2b: vx_proj is heading towards one of the other two edges (not the starting edge)
                         var edgeClassificationVectors = self.getEdgeClassificationUnitVectors(particleLoc, closestFace)
-                        // print "edge classification vectors"
-                        // print "edge 0"
-                        // print edgeClassificationVectors[0][0].transpose()
-                        // print edgeClassificationVectors[0][1].transpose()
-                        // print "edge 1"
-                        // print edgeClassificationVectors[1][0].transpose()
-                        // print edgeClassificationVectors[1][1].transpose()
-                        // print "edge 2"
-                        // print edgeClassificationVectors[2][0].transpose()
-                        // print edgeClassificationVectors[2][1].transpose()
                         var otherEdgeIndices = closestFace.vertexAdjEdgeIndices[oppVertexIdx]
                         var otherEdgeIDs = [
                             closestFace.edgeIDs[otherEdgeIndices[0]],
                             closestFace.edgeIDs[otherEdgeIndices[1]]
                         ]
-                        // print "otherEdgeIDs"
-                        // print otherEdgeIDs
                         var yeArr = [
                             [
                                 classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[otherEdgeIndices[0]][0]),
@@ -1219,11 +1092,6 @@ class ParticleMover{
                                 classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[otherEdgeIndices[1]][1])
                                 ]
                         ]
-                        // print "yeArr"
-                        // print yeArr[0][0]
-                        // print yeArr[0][1]
-                        // print yeArr[1][0]
-                        // print yeArr[1][1]
                         var tgtEdgeID
                         if (yeArr[0][0] + yeArr[0][1] == 2) { // SECTION 2B2b1a: vx_proj goes clearly through edge 0
                             printTag = "2B2b1a"
@@ -1240,16 +1108,7 @@ class ParticleMover{
             if (closestFace == nil) { // SECTION 3A: no closest face -> particle will stay at the vertex
                 printTag = "3A"
                 result = self.moveNowhere(particleInfoArr, dir)
-            } else { // SECTION 3B: Closest face -> particle will move off vertex
-                // print "closestFace id: ${closestFace.id}"
-                // print "vertex Locs"
-                // print "${[closestFace.vertexLocs[0][0],closestFace.vertexLocs[0][1],closestFace.vertexLocs[0][2]]}"
-                // print "${[closestFace.vertexLocs[1][0],closestFace.vertexLocs[1][1],closestFace.vertexLocs[1][2]]}"
-                // print "${[closestFace.vertexLocs[2][0],closestFace.vertexLocs[2][1],closestFace.vertexLocs[2][2]]}"
-                // print "edge vectors"
-                // print "${[closestFace.edgeUnitVectors[0][0],closestFace.edgeUnitVectors[0][1],closestFace.edgeUnitVectors[0][2]]}"
-                // print "${[closestFace.edgeUnitVectors[1][0],closestFace.edgeUnitVectors[1][1],closestFace.edgeUnitVectors[1][2]]}"
-                // print "${[closestFace.edgeUnitVectors[2][0],closestFace.edgeUnitVectors[2][1],closestFace.edgeUnitVectors[2][2]]}"                
+            } else { // SECTION 3B: Closest face -> particle will move off vertex          
                 var vx_proj = a_remove_b(a=vx, b=closestFace.planeUnitNormal)
                 if (vx_proj.norm() < 1e-16) { // SECTION 3B1: ||VX_PROJ|| = 0
                     printTag = "3B1"
@@ -1289,19 +1148,14 @@ class ParticleMover{
                         } else if ((ye1 == 1) && (yi1 == -1)) { // SECTION 3B2b4: vx_proj is outside face, must be projected back to edge 1
                             vx_fin_proj = a_remove_b(a=vx_proj, b=closestFace.inwardEdgeUnitNormals[edgeIndices[1]])
                             printTag = "3B2b4"
-                            tgtVertexIdx = closestFace.vertexAdjEdgeVertIndices[vertexIndex][1]      
-                            // print "dot"
-                            // print (vx_fin_proj/vx_fin_proj.norm()).inner(closestFace.edgeUnitVectors[1])   
+                            tgtVertexIdx = closestFace.vertexAdjEdgeVertIndices[vertexIndex][1]   
                             pathEdgeID = edgeIDs[1]
                             var pathEdgeIndex = closestFace.edgeIDtoIndexDict[pathEdgeID]
-                            // print "pathEdgeID: ${pathEdgeID}"
-                            // print "pathEdgeIndex: ${pathEdgeIndex}"
                         } else { // SECTION 3B2b5: vx_proj not in the face or in the direction of one of the edges
                             printTag = "3B2b5"
                             tgtVertexIdx = nil
                         }
                         if (tgtVertexIdx != nil) {
-                            // print "tgtVertexIdx: ${tgtVertexIdx}"
                             tgtVertexID = closestFace.vertexIDs[tgtVertexIdx]
                             result = self.moveTowardsVertex(particleInfoArr, dir, len, vx_fin_proj, tgtVertexID, 1, pathEdgeID)
                         } else {
@@ -1363,7 +1217,6 @@ class Particles{
     }
     move (force, stepsize=1, quiet=true) {
         var movedPointsInfo = []
-        // self.forceArr.append(force)
         if (islist(force)==false) {
             var vector = force*stepsize
             var len = vector.norm()
@@ -1381,10 +1234,6 @@ class Particles{
                     print "len:     ${len}"
                     print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
                     print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"
-                    // print "forces:"
-                    // for (x in self.forceArr) {
-                    //     print x.transpose()
-                    // }
                 }
                 movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
             }
@@ -1404,11 +1253,7 @@ class Particles{
                     print "dir:     ${[dir[0],dir[1],dir[2]]}"
                     print "len:     ${len}"
                     print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
-                    print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"
-                    // print "forces:"
-                    // for (x in self.forceArr) {
-                    //     print stepsize*x[i].transpose()
-                    // }                
+                    print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"            
                 }
                 movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
             }
@@ -1442,8 +1287,6 @@ fn calcPairwiseForceVectors(particles) {
                 var y = particles[j]
                 var dsq = calcDistSq(x, y)
                 if ((dsq > 1e-8)) {
-                    // forceVector += 1/dsq*1/n*(x - y) // vector will point towards x (because we want to sum up vectors that act on x)
-                    // var dir = x - y
                     var unitdir = (x - y)/(x - y).norm()
                     forceVector += 1/dsq*unitdir // vector will point towards x (because we want to sum up vectors that act on x)
                 }

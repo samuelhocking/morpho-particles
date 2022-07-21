@@ -76,7 +76,7 @@ for (x in p.projectedPoints) {
     projPts.append(x.particleinfo[0])
 }
 
-var steps = 1000
+var steps = 100
 for (i in 1..steps) {
     if (mod(i,100)==0) {
         print "starting step: ${i}"
