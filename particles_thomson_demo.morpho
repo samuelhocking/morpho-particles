@@ -66,7 +66,7 @@ for (refiter in 1..refmax) {
 var mesh = cube
 
 // generate random point cloud
-var ptsArr = GenRandomRectangle(50, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
+var ptsArr = GenRandomRectangle(100, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
 
 var p = Particles(mesh)
 p.project(ptsArr)
@@ -76,13 +76,13 @@ for (x in p.projectedPoints) {
     projPts.append(x.particleinfo[0])
 }
 
-var steps = 100
+var steps = 200
 for (i in 1..steps) {
-    if (mod(i,100)==0) {
+    if (mod(i,10)==0) {
         print "starting step: ${i}"
     }
     var forceArr = calcPairwiseForceVectors(p.pointLocs)
-    p.move(forceArr, stepsize=0.0001, quiet=true)
+    p.moveAll(forceArr, stepsize=0.0001, quiet=true)
 }
 
 var movedPts = []
