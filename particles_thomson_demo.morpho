@@ -76,14 +76,8 @@ for (i in 1..steps) {
     if (mod(i,10)==0) {
         print "starting step: ${i}"
     }
-    var forceArr = calcPairwiseForceVectors(p.pointLocs)
-    p.moveAll(forceArr, stepsize=0.0001, quiet=true)
+    p.moveAll(PairwiseForces(p.pointLocs), stepsize=0.0001, quiet=true)
 }
-
-// var movedPts = []
-// for (x in p.movedPoints) {
-//     movedPts.append(x.particleinfo[0])
-// }
 
 var gMesh = plotmesh(mesh, grade=[2])
 var gCombined = gMesh
@@ -92,6 +86,6 @@ for (i in 0...p.points.count()) {
     gMovedPt = Graphics()
     gMovedPt.display(Sphere(p.points[i].particleinfo[0], 0.02, color=[0,255,0]))
     gCombined += gMovedPt.clone()
-    print "Rendering: ${i+1}/${movedPts.count()}"
+    print "Rendering: ${i+1}/${p.points.count()}"
 }
 Show(gCombined)
