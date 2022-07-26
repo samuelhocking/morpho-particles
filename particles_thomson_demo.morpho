@@ -71,9 +71,9 @@ var ptsArr = GenRandomRectangle(100, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2
 var p = Particles(mesh)
 p.project(ptsArr)
 
-var steps = 200
+var steps = 1000
 for (i in 1..steps) {
-    if (mod(i,10)==0) {
+    if (mod(i,floor(steps/20))==0) {
         print "starting step: ${i}"
     }
     p.moveAll(PairwiseForces(p.pointLocs), stepsize=0.0001, quiet=true)
