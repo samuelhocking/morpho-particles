@@ -1305,7 +1305,7 @@ fn calcDist(x, y) {
     return sqrt(calcDistSq(x, y))
 }
 
-fn calcPairwiseForceVectors(particles) {
+fn PairwiseForces(particles) {
     var forceVectors = []
     var n = particles.count()
     for (i in 0...n) {
