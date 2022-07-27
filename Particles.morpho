@@ -1295,12 +1295,12 @@ class Particles{
 
 // functions to replicate pairwise repulsion a la thomson.morpho example
 
-fn calcDistSq(x, y) {
+fn distSqXY(x, y) {
     var d = x-y
     return d.inner(d)
 }
 
-fn calcDist(x, y) {
+fn distXY(x, y) {
     var d = x-y
     return sqrt(calcDistSq(x, y))
 }
@@ -1326,20 +1326,51 @@ fn PairwiseForces(particles) {
     return forceVectors
 }
 
-class PairwiseDistForce{
-    init(func) {
-        self.func = func
-    }
-    force(r) {
-        return func(r)
+class PairwiseForce{
+    force(x, y) {
+        return self.func(x, y)
     }
 }
 
-class SinglePosForce{
-    init(func) {
-        self.func = func
-    }
+class SingleForce{
     force(x) {
-        return func(x)
+        return self.func(x)
+    }
+}
+
+fn unitXY(x, y) {
+    var dir = x - y
+    if (dir.norm() > 0) {
+        return dir/dir.norm()
+    } else {
+        return dir
+    }
+}
+
+class Electrostatic is PairwiseForce {
+    func(x, y) {
+        if ((x-y).norm() < 1e-8) {
+            return Matrix([0,0,0])
+        } else {
+            return 1/distSqXY(x,y)*unitXY(x, y)
+        }
+    }
+}
+
+class XYSwirl is SingleForce {
+    func(x) {
+        return Matrix([-x[1], x[0], 0])
+    }
+}
+
+class XZSwirl is SingleForce {
+    func(x) {
+        return Matrix([-x[2], 0, x[0]])
+    }
+}
+
+class YZSwirl is SingleForce {
+    func(x) {
+        return Matrix([0, -x[2], x[1]])
     }
 }
