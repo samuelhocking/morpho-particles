@@ -1302,6 +1302,8 @@ class Particles{
             self.moveAll(force, stepsize=stepsize, quiet=stepQuiet)
         }
     }
+    // add moveOne
+    // add moveOneLoop
 }
 
 // functions to replicate pairwise repulsion a la thomson.morpho example
