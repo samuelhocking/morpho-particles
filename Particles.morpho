@@ -1292,6 +1292,16 @@ class Particles{
         self.points = movedPointsInfo
         self.getPointLocs()
     }
+    moveAllLoop (steps, force, stepsize=1, stepQuiet=true, loopQuiet=true) {
+        for (i in 1..steps) {
+            if (loopQuiet == true) {
+                if (mod(i,floor(steps/10))==0) {
+                    print "movement step: ${i}"
+                }                
+            }
+            self.moveAll(force, stepsize=stepsize, quiet=stepQuiet)
+        }
+    }
 }
 
 // functions to replicate pairwise repulsion a la thomson.morpho example
