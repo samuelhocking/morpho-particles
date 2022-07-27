@@ -1246,7 +1246,7 @@ class Particles{
     }
     moveAll (force, stepsize=1, quiet=true) {
         var movedPointsInfo = []
-        if (islist(force)==false) {
+        if (ismatrix(force)==false) {
             var vector = force*stepsize
             var len = vector.norm()
             var dir
@@ -1302,7 +1302,7 @@ fn distSqXY(x, y) {
 
 fn distXY(x, y) {
     var d = x-y
-    return sqrt(calcDistSq(x, y))
+    return sqrt(distSqXY(x, y))
 }
 
 fn PairwiseForces(particles) {
@@ -1326,15 +1326,53 @@ fn PairwiseForces(particles) {
     return forceVectors
 }
 
-class PairwiseForce{
-    force(x, y) {
-        return self.func(x, y)
+fn electrostaticForce(x, y) {
+    if ((x-y).norm() < 1e-8) {
+        return Matrix([0,0,0])
+    } else {
+        return 1/distSqXY(x,y)*unitXY(x, y)
     }
 }
 
-class SingleForce{
+class Force{
+    init(func) {
+        self.func = func
+    }
+}
+
+class PairwiseForce is Force{
+    force(x, y) {
+        return self.func(x, y)
+    }
+    totalForce(particles, index) {
+        var out = Matrix([0,0,0])
+        var n = particles.count()
+        var x = particles[index]
+        for (i in 0...n) {
+            if (i != index) {
+                var y = particles[i]
+                out += self.force(x, y)
+            }
+        }
+        return out
+    }
+}
+
+class SinglePositionForce is Force{
     force(x) {
         return self.func(x)
+    }
+    totalForce(particles, index) {
+        return self.force(particles[index])
+    }
+}
+
+class ConstantForce is Force{
+    force() {
+        return self.func()
+    }
+    totalForce(particles, index) {
+        return self.force()
     }
 }
 
@@ -1347,8 +1385,9 @@ fn unitXY(x, y) {
     }
 }
 
+
 class Electrostatic is PairwiseForce {
-    func(x, y) {
+    func(x,y) {
         if ((x-y).norm() < 1e-8) {
             return Matrix([0,0,0])
         } else {
@@ -1357,20 +1396,34 @@ class Electrostatic is PairwiseForce {
     }
 }
 
-class XYSwirl is SingleForce {
+class XYSwirl is SinglePositionForce {
     func(x) {
         return Matrix([-x[1], x[0], 0])
     }
 }
 
-class XZSwirl is SingleForce {
+class XZSwirl is SinglePositionForce {
     func(x) {
         return Matrix([-x[2], 0, x[0]])
     }
 }
 
-class YZSwirl is SingleForce {
+class YZSwirl is SinglePositionForce {
     func(x) {
         return Matrix([0, -x[2], x[1]])
+    }
+}
+
+class ParticlesForceMatrix {
+    init(particles, forceFunctional) {
+        self.matrix = getMatrix()
+    }
+    getMatrix(particles, forceFunctional) {
+        var n = particles.count()
+        var out = Matrix(3, n)
+        for (i in 0...n) {
+            out.setcolumn(i, forceFunctional.totalForce(particles, i))
+        }
+        return out
     }
 }
