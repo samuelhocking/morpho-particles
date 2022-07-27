@@ -1325,3 +1325,21 @@ fn PairwiseForces(particles) {
     }
     return forceVectors
 }
+
+class PairwiseDistForce{
+    init(func) {
+        self.func = func
+    }
+    force(r) {
+        return func(r)
+    }
+}
+
+class SinglePosForce{
+    init(func) {
+        self.func = func
+    }
+    force(x) {
+        return func(x)
+    }
+}
