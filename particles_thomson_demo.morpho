@@ -76,7 +76,7 @@ for (i in 1..steps) {
     if (mod(i,floor(steps/20))==0) {
         print "starting step: ${i}"
     }
-    p.moveAll(PairwiseForces(p.pointLocs), stepsize=0.0001, quiet=true)
+    p.moveAll(ElectrostaticPairwise(), stepsize=0.0001, quiet=true)
 }
 
 var gMesh = plotmesh(mesh, grade=[2])

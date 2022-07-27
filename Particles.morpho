@@ -1246,7 +1246,7 @@ class Particles{
     }
     moveAll (force, stepsize=1, quiet=true) {
         var movedPointsInfo = []
-        if (ismatrix(force)==false) {
+        if (ismatrix(force)==true) {
             var vector = force*stepsize
             var len = vector.norm()
             var dir
@@ -1267,8 +1267,9 @@ class Particles{
                 movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
             }
         } else {
-            for (i in 0...self.points.count()) {
-                var vector = stepsize*force[i]
+            var forceMatrix = force.getForceMatrix(self.pointLocs)
+            for (i in 0...forceMatrix.dimensions()[1]) {
+                var vector = stepsize*forceMatrix.column(i)
                 var len = vector.norm()
                 var dir
                 if (len > 0) {
@@ -1305,42 +1306,30 @@ fn distXY(x, y) {
     return sqrt(distSqXY(x, y))
 }
 
-fn PairwiseForces(particles) {
-    var forceVectors = []
-    var n = particles.count()
-    for (i in 0...n) {
-        var x = particles[i]
-        var forceVector = Matrix([0,0,0])
-        for (j in 0...n) {
-            if (i != j) {
-                var y = particles[j]
-                var dsq = calcDistSq(x, y)
-                if ((dsq > 1e-8)) {
-                    var unitdir = (x - y)/(x - y).norm()
-                    forceVector += 1/dsq*unitdir // vector will point towards x (because we want to sum up vectors that act on x)
-                }
-            }
-        }
-        forceVectors.append(forceVector)
-    }
-    return forceVectors
-}
-
-fn electrostaticForce(x, y) {
-    if ((x-y).norm() < 1e-8) {
-        return Matrix([0,0,0])
+fn unitXY(x, y) {
+    var dir = x - y
+    if (dir.norm() > 0) {
+        return dir/dir.norm()
     } else {
-        return 1/distSqXY(x,y)*unitXY(x, y)
+        return dir
     }
 }
 
 class Force{
-    init(func) {
-        self.func = func
+    getForceMatrix(particles) {
+        var n = particles.count()
+        var out = Matrix(3, n)
+        for (i in 0...n) {
+            out.setcolumn(i, self.totalForce(particles, i))
+        }
+        return out
     }
 }
 
 class PairwiseForce is Force{
+    init(func) {
+        self.func = func
+    }
     force(x, y) {
         return self.func(x, y)
     }
@@ -1376,18 +1365,11 @@ class ConstantForce is Force{
     }
 }
 
-fn unitXY(x, y) {
-    var dir = x - y
-    if (dir.norm() > 0) {
-        return dir/dir.norm()
-    } else {
-        return dir
+class ElectrostaticPairwise is PairwiseForce{
+    init() {
+        self.func = self.electrostaticForce
     }
-}
-
-
-class Electrostatic is PairwiseForce {
-    func(x,y) {
+    electrostaticForce(x,y) {
         if ((x-y).norm() < 1e-8) {
             return Matrix([0,0,0])
         } else {
@@ -1416,7 +1398,7 @@ class YZSwirl is SinglePositionForce {
 
 class ParticlesForceMatrix {
     init(particles, forceFunctional) {
-        self.matrix = getMatrix()
+        self.matrix = self.getMatrix()
     }
     getMatrix(particles, forceFunctional) {
         var n = particles.count()
