@@ -60,9 +60,10 @@ fn randSign() {
 fn GenRandomSphere(numPts, r=1) {
     var ptsArr = []
     for (i in 1..numPts) {
-        var x = -r+2*r*random()
-        var y = -r+2*r*random()
-        var z = randSign()*sqrt(r^2 -(x^2+y^2))
+        var x = min(max(-r+2*r*random(),-r),r)
+        var y = min(max(-r+2*r*random(),-r),r)
+        var z = min(max(randSign()*sqrt(r^2 -(x^2+y^2)),-r),r)
+        print [x,y,z]
         ptsArr.append(Matrix([x,y,z]))
     }
     return ptsArr
@@ -71,10 +72,10 @@ fn GenRandomSphere(numPts, r=1) {
 fn GenRandomBall(numPts, r=1) {
     var ptsArr = []
     for (i in 1..numPts) {
-        var rEff = r*random()
-        var x = -rEff+2*r*random()
-        var y = -rEff+2*r*random()
-        var z = randSign()*sqrt(rEff^2 -(x^2+y^2))
+        var r = r*random()
+        var x = min(max(-r+2*r*random(),-r),r)
+        var y = min(max(-r+2*r*random(),-r),r)
+        var z = min(max(randSign()*sqrt(r^2 -(x^2+y^2)),-r),r)
         ptsArr.append(Matrix([x,y,z]))        
     }
     return ptsArr
