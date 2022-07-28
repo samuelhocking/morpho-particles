@@ -24,6 +24,25 @@ fn rotateIndices(delta, adjust=true) {
     }
 }
 
+fn distSqXY(x, y) {
+    var d = x-y
+    return d.inner(d)
+}
+
+fn distXY(x, y) {
+    var d = x-y
+    return sqrt(distSqXY(x, y))
+}
+
+fn unitXY(x, y) {
+    var dir = x - y
+    if (dir.norm() > 0) {
+        return dir/dir.norm()
+    } else {
+        return dir
+    }
+}
+
 //timer class (for testing)
 class timerClass {
     init() {
@@ -1318,25 +1337,6 @@ class Particles{
             }
             self.moveOnebyOne(force, stepsize=stepsize, quiet=stepQuiet)
         }
-    }
-}
-
-fn distSqXY(x, y) {
-    var d = x-y
-    return d.inner(d)
-}
-
-fn distXY(x, y) {
-    var d = x-y
-    return sqrt(distSqXY(x, y))
-}
-
-fn unitXY(x, y) {
-    var dir = x - y
-    if (dir.norm() > 0) {
-        return dir/dir.norm()
-    } else {
-        return dir
     }
 }
 
