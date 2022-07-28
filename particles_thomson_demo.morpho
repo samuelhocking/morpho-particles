@@ -71,7 +71,7 @@ var p = Particles(mesh)
 p.project(ptsArr)
 
 // p.moveAllLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
-p.moveOnebyOneLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
+p.moveOnebyOneLoop(100, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
 
 var gMesh = plotmesh(mesh, grade=[2])
 var gCombined = gMesh
