@@ -1280,7 +1280,7 @@ class Particles{
             self.moveAll(force, stepsize=stepsize, quiet=stepQuiet)
         }
     }
-    // add moveOne
+
     moveOnebyOne (force, stepsize=1, quiet=true) {
         var points = self.points
         var pointLocs = self.pointLocs
@@ -1309,7 +1309,6 @@ class Particles{
         self.points = points
         self.pointLocs = pointLocs
     }
-    // add moveOneLoop
     moveOnebyOneLoop (steps, force, stepsize=1, stepQuiet=true, loopQuiet=true) {
         for (i in 1..steps) {
             if (loopQuiet == true) {
@@ -1321,8 +1320,6 @@ class Particles{
         }
     }
 }
-
-// functions to replicate pairwise repulsion a la thomson.morpho example
 
 fn distSqXY(x, y) {
     var d = x-y
