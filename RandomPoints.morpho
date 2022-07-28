@@ -29,7 +29,10 @@ fn GenRandomRectangle(numPts, xBounds=nil, yBounds=nil, zBounds=nil) {
     return ptsArr
 }
 
-fn GenRandomBall(r=1, usteps=5, vsteps=5, wsteps=5) {
+fn GenParametrizedBall(r=1, usteps=5, vsteps=5, wsteps=5) {
+    // u: steps along longitudinal arc
+    // v: steps along latitudinal arc
+    // w: steps along radius
     var ptsArr = []
     var x, y, z
     for (var u=0; u<=usteps; u+=1) {
@@ -41,6 +44,38 @@ fn GenRandomBall(r=1, usteps=5, vsteps=5, wsteps=5) {
                 ptsArr.append(Matrix([x,y,z]))
             }
         }
+    }
+    return ptsArr
+}
+
+fn randSign() {
+    var x = random()
+    if (x >= 0.5) {
+        return 1
+    } else {
+        return -1
+    }
+}
+
+fn GenRandomSphere(numPts, r=1) {
+    var ptsArr = []
+    for (i in 1..numPts) {
+        var x = -r+2*r*random()
+        var y = -r+2*r*random()
+        var z = randSign()*sqrt(r^2 -(x^2+y^2))
+        ptsArr.append(Matrix([x,y,z]))
+    }
+    return ptsArr
+}
+
+fn GenRandomBall(numPts, r=1) {
+    var ptsArr = []
+    for (i in 1..numPts) {
+        var rEff = r*random()
+        var x = -rEff+2*r*random()
+        var y = -rEff+2*r*random()
+        var z = randSign()*sqrt(rEff^2 -(x^2+y^2))
+        ptsArr.append(Matrix([x,y,z]))        
     }
     return ptsArr
 }
