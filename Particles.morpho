@@ -1303,6 +1303,11 @@ class Particles{
         }
     }
     // add moveOne
+    // moveOnebyOne (force, stepsize=1, quiet=true) {
+    //     var movedPointsInfo = self.points
+
+    // }
+
     // add moveOneLoop
 }
 
@@ -1328,6 +1333,9 @@ fn unitXY(x, y) {
 }
 
 class Force{
+    init(func) {
+        self.func = func
+    }
     getForceMatrix(particles) {
         var n = particles.count()
         var out = Matrix(3, n)
@@ -1339,9 +1347,6 @@ class Force{
 }
 
 class PairwiseForce is Force{
-    init(func) {
-        self.func = func
-    }
     force(x, y) {
         return self.func(x, y)
     }
