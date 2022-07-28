@@ -65,21 +65,13 @@ for (refiter in 1..refmax) {
 }
 var mesh = cube
 
-// generate random point cloud
-// var ptsArr = GenRandomRectangle(100, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
 var ptsArr = GenRandomSphere(100, r=1)
 
 var p = Particles(mesh)
 p.project(ptsArr)
 
-// var steps = 1000
-// for (i in 1..steps) {
-//     if (mod(i,floor(steps/20))==0) {
-//         print "starting step: ${i}"
-//     }
-//     p.moveAll(ElectrostaticPairwise(), stepsize=0.0001, quiet=true)
-// }
-p.moveAllLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
+// p.moveAllLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
+p.moveOnebyOneLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
 
 var gMesh = plotmesh(mesh, grade=[2])
 var gCombined = gMesh

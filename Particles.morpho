@@ -1246,8 +1246,9 @@ class Particles{
     }
     moveAll (force, stepsize=1, quiet=true) {
         var movedPointsInfo = []
-        if (ismatrix(force)==true) {
-            var vector = force*stepsize
+        var forceMatrix = force.getForceMatrix(self.pointLocs)
+        for (i in 0...forceMatrix.dimensions()[1]) {
+            var vector = stepsize*forceMatrix.column(i)
             var len = vector.norm()
             var dir
             if (len > 0) {
@@ -1255,38 +1256,15 @@ class Particles{
             } else {
                 dir = vector
             }
-            for (i in 0...self.points.count()) {
-                var x = self.points[i].particleinfo
-                if (quiet != true) {
-                    print "Moving:  ${i+1}/${self.points.count()}"
-                    print "dir:     ${[dir[0],dir[1],dir[2]]}"
-                    print "len:     ${len}"
-                    print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
-                    print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"
-                }
-                movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
+            var x = self.points[i].particleinfo
+            if (quiet != true) {
+                print "Moving:  ${i+1}/${self.points.count()}"
+                print "dir:     ${[dir[0],dir[1],dir[2]]}"
+                print "len:     ${len}"
+                print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
+                print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"            
             }
-        } else {
-            var forceMatrix = force.getForceMatrix(self.pointLocs)
-            for (i in 0...forceMatrix.dimensions()[1]) {
-                var vector = stepsize*forceMatrix.column(i)
-                var len = vector.norm()
-                var dir
-                if (len > 0) {
-                    dir = vector/vector.norm()
-                } else {
-                    dir = vector
-                }
-                var x = self.points[i].particleinfo
-                if (quiet != true) {
-                    print "Moving:  ${i+1}/${self.points.count()}"
-                    print "dir:     ${[dir[0],dir[1],dir[2]]}"
-                    print "len:     ${len}"
-                    print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
-                    print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"            
-                }
-                movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
-            }
+            movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
         }
         self.movedPoints = movedPointsInfo
         self.points = movedPointsInfo
@@ -1304,11 +1282,44 @@ class Particles{
     }
     // add moveOne
     moveOnebyOne (force, stepsize=1, quiet=true) {
-        var movedPointsInfo = self.points
-
+        var points = self.points
+        var pointLocs = self.pointLocs
+        for (i in 0...self.points.count()) {
+            var vector = stepsize*force.totalForce(pointLocs, i)
+            var len = vector.norm()
+            var dir
+            if (len > 0) {
+                dir = vector/vector.norm()
+            } else {
+                dir = vector
+            }
+            var x = points[i].particleinfo
+            if (quiet != true) {
+                print "Moving:  ${i+1}/${self.points.count()}"
+                print "dir:     ${[dir[0],dir[1],dir[2]]}"
+                print "len:     ${len}"
+                print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
+                print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"            
+            }
+            var movedx = self.particleMover.movementLoop(x, dir, len, quiet=quiet)
+            points[i] = movedx
+            pointLocs[i] = movedx.particleinfo[0]
+        }
+        self.movedPoints = points
+        self.points = points
+        self.pointLocs = pointLocs
     }
-
     // add moveOneLoop
+    moveOnebyOneLoop (steps, force, stepsize=1, stepQuiet=true, loopQuiet=true) {
+        for (i in 1..steps) {
+            if (loopQuiet == true) {
+                if (mod(i,floor(steps/10))==0) {
+                    print "movement step: ${i}"
+                }                
+            }
+            self.moveOnebyOne(force, stepsize=stepsize, quiet=stepQuiet)
+        }
+    }
 }
 
 // functions to replicate pairwise repulsion a la thomson.morpho example
