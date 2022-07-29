@@ -1,0 +1,26 @@
+// Tester object to facilitate timing callable performance
+// By: Sam Hocking
+
+class Tester{
+    init(activeFlag=false) {
+        self.activeFlag = activeFlag
+        self.stepTimes = []
+        self.stepNames = []
+    }
+    call(func, name=nil) {
+        if (self.activeFlag == true) {
+            var start = clock()
+            var out = func
+            self.stepTimes.append(clock()-start)
+            if (name == nil) {
+                self.stepNames.append(func)
+            } else {
+                self.stepNames.append(name)
+            }
+            return out
+        } else {
+            var out = func
+            return out
+        }
+    }
+}

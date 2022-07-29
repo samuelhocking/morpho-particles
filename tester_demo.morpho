@@ -1,0 +1,12 @@
+import "Tester.morpho"
+
+fn testFunc(x, y) {
+    return x + y
+}
+
+var tester = Tester(activeFlag=true)
+
+tester.call(testFunc(1,2), name="testFunc")
+
+print tester.stepTimes
+print tester.stepNames
