@@ -1,6 +1,5 @@
 # Tools to import dict-like strings from morpho to python
 # By: Sam Hocking
-# Updated: 7/5/2022
 
 import json
 

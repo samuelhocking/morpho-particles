@@ -1,6 +1,5 @@
 # Helper script to produce matplotlib plots from morpho dicts
 # By: Sam Hocking
-# Updated: 7/5/2022
 
 import sys
 import json
