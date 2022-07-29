@@ -8,5 +8,4 @@ var tester = Tester(activeFlag=true)
 
 tester.call(testFunc(1,2), name="testFunc")
 
-print tester.stepTimes
-print tester.stepNames
+print tester.timingDict

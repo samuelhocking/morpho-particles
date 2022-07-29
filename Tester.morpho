@@ -4,23 +4,20 @@
 class Tester{
     init(activeFlag=false) {
         self.activeFlag = activeFlag
-        self.stepTimes = []
-        self.stepNames = []
+        self.timingDict = Dictionary()
     }
     call(func, name=nil) {
         if (self.activeFlag == true) {
             var start = clock()
             var out = func
-            self.stepTimes.append(clock()-start)
             if (name == nil) {
-                self.stepNames.append(func)
+                self.timingDict[String(func)] = clock()-start
             } else {
-                self.stepNames.append(name)
+                self.timingDict[name] = clock()-start
             }
             return out
         } else {
-            var out = func
-            return out
+            return func
         }
     }
 }

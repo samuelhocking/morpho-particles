@@ -27,5 +27,4 @@ var e001 = Matrix([0,0,1])
 
 tester.call(p.moveAll(ConstantForce((1*e100) + (0.5*e001)), quiet=true), name="moveAll")
 
-print tester.stepTimes
-print tester.stepNames
+print tester.timingDict
