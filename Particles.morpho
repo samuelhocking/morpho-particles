@@ -1229,18 +1229,44 @@ class ParticleMover{
     }
 }
 
+class Tester{
+    init(activeFlag=false) {
+        self.activeFlag = activeFlag
+        self.stepTimes = []
+        self.stepNames = []
+    }
+    call(func) {
+        if (self.activeFlag == true) {
+            var start = clock()
+            var out = func
+            self.stepTimes.append(clock()-start)
+            self.stepNames.append(func)
+            return out
+        } else {
+            var out = func
+            return out
+        }
+    }
+}
+
 class Particles{
-    init (mesh) {
+    init (mesh, testerObj=nil) {
         self.mesh = mesh
-        self.meshConn = MeshConnectivity(self.mesh)
-        self.vertexHelper = VertexHelper(self.meshConn)
-        self.kdHelper = KDHelper(self.mesh)
-        self.faceKD = FaceKDHelper(self.meshConn)
-        self.edgeKD = EdgeKDHelper(self.meshConn)
-        self.simpleFaceHelper = SimpleFaceHelper(self.faceKD, self.edgeKD)
-        self.starHelper = StarHelper(self.vertexHelper, self.simpleFaceHelper)
-        self.starProjector = StarProjector(self.starHelper)
-        self.particleMover = ParticleMover(self.simpleFaceHelper, self.starProjector)
+        var tester
+        if (testerObj == nil) {
+            self.tester = Tester(activeFlag=false)
+        } else {
+            self.tester = testerObj
+        }
+        self.meshConn = self.tester.call(MeshConnectivity(self.mesh))
+        self.vertexHelper = self.tester.call(VertexHelper(self.meshConn))
+        self.kdHelper = self.tester.call(KDHelper(self.mesh))
+        self.faceKD = self.tester.call(FaceKDHelper(self.meshConn))
+        self.edgeKD = self.tester.call(EdgeKDHelper(self.meshConn))
+        self.simpleFaceHelper = self.tester.call(SimpleFaceHelper(self.faceKD, self.edgeKD))
+        self.starHelper = self.tester.call(StarHelper(self.vertexHelper, self.simpleFaceHelper))
+        self.starProjector = self.tester.call(StarProjector(self.starHelper))
+        self.particleMover = self.tester.call(ParticleMover(self.simpleFaceHelper, self.starProjector))
         self.forceArr = []
     }
 
@@ -1337,6 +1363,41 @@ class Particles{
             }
             self.moveOnebyOne(force, stepsize=stepsize, quiet=stepQuiet)
         }
+    }
+}
+
+class ParticlePlotter{
+    init(particlesObj) {
+        self.particles = particlesObj
+        self.mesh = self.particles.mesh
+    }
+    plot(grade=nil, projectablePoints=false, projectedPoints=false, movedPoints=false, quiet=false) {
+        var gMesh = plotmesh(self.mesh, grade=grade)
+        var gCombined = gMesh
+        if (grade == nil) {
+            var grade = [2]
+        }
+        for (i in 0...self.particles.points.count()) {
+            if (quiet == false) {
+                print "Plotting: ${i+1}/${self.particles.points.count()}"
+            }
+            if (projectablePoints == true) {
+                var gPt = Graphics()
+                gPt.display(Sphere(self.particles.projectablePoints[i], 0.02, color=[0,0,255]))                
+                gCombined += gPt.clone()
+            }
+            if (projectedPoints == true) {
+                var gPt = Graphics()
+                gPt.display(Sphere(self.particles.projectedPoints[i].particleinfo[0], 0.02, color=[255,0,0]))                
+                gCombined += gPt.clone()
+            }
+            if (movedPoints == true) {
+                var gPt = Graphics()
+                gPt.display(Sphere(self.particles.points[i].particleinfo[0], 0.02, color=[0,255,0]))                
+                gCombined += gPt.clone()
+            }
+        }
+        Show(gCombined)
     }
 }
 

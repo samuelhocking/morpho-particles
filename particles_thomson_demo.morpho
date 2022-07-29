@@ -62,13 +62,5 @@ p.project(ptsArr)
 // p.moveAllLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
 p.moveOnebyOneLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
 
-var gMesh = plotmesh(mesh, grade=[2])
-var gCombined = gMesh
-var gMovedPt
-for (i in 0...p.points.count()) {
-    gMovedPt = Graphics()
-    gMovedPt.display(Sphere(p.points[i].particleinfo[0], 0.02, color=[0,255,0]))
-    gCombined += gMovedPt.clone()
-    print "Rendering: ${i+1}/${p.points.count()}"
-}
-Show(gCombined)
+var pp = ParticlePlotter(p)
+pp.plot(grade=[2], movedPoints=true, quiet=true)
