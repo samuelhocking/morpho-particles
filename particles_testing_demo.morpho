@@ -17,32 +17,15 @@ var mesh = torus
 
 var p = Particles(mesh, testerObj=tester)
 
-var ptsArr = tester.call(GenRandomRectangle(1000, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2]))
+var ptsArr = tester.call(GenRandomRectangle(1000, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2]), name="GenRandomRectangle")
 
-tester.call(p.project(ptsArr))
+tester.call(p.project(ptsArr), name="project")
 
 var e100 = Matrix([1,0,0])
 var e010 = Matrix([0,1,0])
 var e001 = Matrix([0,0,1])
 
-tester.call(p.moveAll(ConstantForce((1*e100) + (0.5*e001)), quiet=true))
+tester.call(p.moveAll(ConstantForce((1*e100) + (0.5*e001)), quiet=true), name="moveAll")
 
 print tester.stepTimes
 print tester.stepNames
-
-var pp = ParticlePlotter(p)
-pp.plot(grade=[2])
-
-// var gMesh = plotmesh(mesh, grade=[2])
-// var gCombined = gMesh
-// var gProjPt, gMovedPt
-// for (i in 0...p.points.count()) {
-//     // print "Rendering: ${i+1}/${p.points.count()}"
-//     gProjPt = Graphics()
-//     gProjPt.display(Sphere(p.projectedPoints[i].particleinfo[0], 0.02, color=[255,0,0]))
-//     gCombined += gProjPt.clone()
-//     gMovedPt = Graphics()
-//     gMovedPt.display(Sphere(p.points[i].particleinfo[0], 0.02, color=[0,255,0]))
-//     gCombined += gMovedPt.clone()
-// }
-// Show(gCombined)
