@@ -32,7 +32,7 @@ df.to_json(f'{cwd}/results/results_{xfield}_({datetime.now().strftime("%Y.%m.%d-
 fig, ax = plt.subplots()
 
 for col in df.columns:
-    plt.plot(df[col], df[col], label=f'{col}')
+    plt.plot(df[xfield], df[col], label=f'{col}')
 
 plt.legend()
 ax.set_title(f'Process "time" vs. {xfield} [{notxfield}={int(df[notxfield][0])}] ({version})')
