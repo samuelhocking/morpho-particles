@@ -31,11 +31,8 @@ df.to_json(f'{cwd}/results/results_{xfield}_({datetime.now().strftime("%Y.%m.%d-
 
 fig, ax = plt.subplots()
 
-plt.plot(df[xfield], df['kd-tree search'], label='kd-tree search')
-plt.plot(df[xfield], df['projection process'], label='projection')
-plt.plot(df[xfield], df['projection loop'], label='total search & project')
-plt.plot(df[xfield], df['starHelper'], label='starHelper processes')
-plt.plot(df[xfield], df['total'], label='total')
+for col in df.columns:
+    plt.plot(df[col], df[col], label=f'{col}')
 
 plt.legend()
 ax.set_title(f'Process "time" vs. {xfield} [{notxfield}={int(df[notxfield][0])}] ({version})')
