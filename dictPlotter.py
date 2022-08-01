@@ -14,7 +14,6 @@ cwd = os.getcwd()
 
 seriesArr = []
 xfield = sys.argv[1]
-version = sys.argv[2]
 
 if xfield == "num points":
     notxfield = "num vertices"
@@ -27,7 +26,7 @@ df = pd.DataFrame(seriesArr)
 print(df)
 
 df.to_csv(f'{cwd}/results/results_{xfield}_({datetime.now().strftime("%Y.%m.%d-%H.%M.%S")}).csv')
-df.to_json(f'{cwd}/results/results_{xfield}_({datetime.now().strftime("%Y.%m.%d-%H.%M.%S")}).json')
+# df.to_json(f'{cwd}/results/results_{xfield}_({datetime.now().strftime("%Y.%m.%d-%H.%M.%S")}).json')
 
 fig, ax = plt.subplots()
 
@@ -35,10 +34,10 @@ for col in df.columns:
     plt.plot(df[xfield], df[col], label=f'{col}')
 
 plt.legend()
-ax.set_title(f'Process "time" vs. {xfield} [{notxfield}={int(df[notxfield][0])}] ({version})')
+ax.set_title(f'Process "time" vs. {xfield} [{notxfield}={int(df[notxfield][0])}]')
 ax.set_xlabel(xfield)
 ax.set_ylabel('"Time"')
-filename = f'{cwd}/results/results_plot_{xfield}_{version}_({datetime.now().strftime("%Y.%m.%d-%H.%M.%S")}).png'
+filename = f'{cwd}/results/results_plot_{xfield}_({datetime.now().strftime("%Y.%m.%d-%H.%M.%S")}).png'
 plt.savefig(filename)
 plt.show()
 

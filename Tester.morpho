@@ -1,10 +1,14 @@
 // Tester object to facilitate timing callable performance
 // By: Sam Hocking
 
+import meshtools
+import constants
+
 class Tester{
     init(activeFlag=false) {
         self.activeFlag = activeFlag
         self.timingDict = Dictionary()
+        self.trial
     }
     call(func, name=nil) {
         if (self.activeFlag == true) {
@@ -20,4 +24,18 @@ class Tester{
             return func
         }
     }
+
+}
+
+fn nVertexSphere(numVerts, r=1) {
+    var uSteps = floor(sqrt(numVerts))
+    var vSteps = floor(numVerts/uSteps)
+    var uInc = Pi/(uSteps-1)
+    var vInc = 2*Pi/(vSteps-1)
+    var m = AreaMesh(fn (u, v) [
+        r*sin(u)*cos(v),
+        r*sin(u)*sin(v),
+        r*cos(u)], 0..Pi:uInc, 0..2*Pi:vInc, closed=true)
+    m.addgrade(1)
+    return m
 }
