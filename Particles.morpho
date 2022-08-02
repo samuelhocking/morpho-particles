@@ -302,7 +302,7 @@ class Face{
     }
 
     getPlaneUnitNormal() {
-        var normal = cross(self.edgeVectors[0], -self.edgeVectors[2])
+        var normal = cross(self.edgeVectors[0], self.edgeVectors[1])
         return normal/normal.norm()
     }
 
