@@ -203,7 +203,7 @@ class EdgeKDHelper {
 }
 
 // face object designed to be used in particle movement, not naturally oriented in stars
-class SimpleFace{
+class Face{
     init (faceKDObj, edgeKDObj, id) {
         self.faceKDObj = faceKDObj
         self.edgeKDObj = edgeKDObj
@@ -343,67 +343,67 @@ class SimpleFace{
     }
 }
 
-// helper class that generates an array of simpleFace objects for the mesh, indexed by face ID
-class SimpleFaceHelper{
+// helper class that generates an array of Face objects for the mesh, indexed by face ID
+class FaceHelper{
     init (faceKDObj, edgeKDObj) {
         self.faceKDObj = faceKDObj
         self.edgeKDObj = edgeKDObj
         self.mesh = self.faceKDObj.mesh
         self.conn = self.faceKDObj.conn
-        self.simpleFaceArr = self.getSimpleFaceArr()   
+        self.faceArr = self.getFaceArr()   
     }
 
-    getSimpleFaceArr() {
-        var simpleFaceArr = []
+    getFaceArr() {
+        var faceArr = []
         for (idx in 0...self.mesh.count(2)) {
-            simpleFaceArr.append(SimpleFace(self.faceKDObj, self.edgeKDObj, idx))
+            faceArr.append(Face(self.faceKDObj, self.edgeKDObj, idx))
         }
-        return simpleFaceArr
+        return faceArr
     }
 }
 
-// wrapper for a SimpleFace to accomodate a particular orientation within a Star
-class StarSimpleFace{
-    init (simpleFaceHelperObj, vertexIDs) {
+// wrapper for a Face to accomodate a particular orientation within a Star
+class StarFace{
+    init (faceHelperObj, vertexIDs) {
         // inter-object references
-        self.simpleFaceHelper = simpleFaceHelperObj
-        self.faceKDObj = self.simpleFaceHelper.faceKDObj
-        self.edgeKDObj = self.simpleFaceHelper.edgeKDObj
+        self.faceHelper = faceHelperObj
+        self.faceKDObj = self.faceHelper.faceKDObj
+        self.edgeKDObj = self.faceHelper.edgeKDObj
         self.mesh = self.faceKDObj.mesh
         self.conn = self.faceKDObj.conn
         // basic arguments from star
         self.centerID = vertexIDs[0]
         self.sortedReqVertexIDs = vertexIDs.clone()
         self.sortedReqVertexIDs.sort()
-        // get faceID of the face and find un-manipulated simpleFace
+        // get faceID of the face and find un-manipulated face
         self.id = self.faceKDObj.tree.nearest(Matrix(self.sortedReqVertexIDs)).id
-        self.rawSimpleFace = self.simpleFaceHelper.simpleFaceArr[self.id]
+        self.rawFace = self.faceHelper.faceArr[self.id]
 
-        // find rotation delta and rotate simpleFace elements accordingly
-        self.rotationDelta = self.rawSimpleFace.vertexIDtoIndexDict[self.centerID]
+        // find rotation delta and rotate face elements accordingly
+        self.rotationDelta = self.rawFace.vertexIDtoIndexDict[self.centerID]
         if (self.rotationDelta != 0) {
             var rotationIndices = rotateIndices(self.rotationDelta, adjust=true)
-            self.vertexIDs = self.rawSimpleFace.vertexIDs[rotationIndices]
-            self.vertexLocs = self.rawSimpleFace.vertexLocs[rotationIndices]
+            self.vertexIDs = self.rawFace.vertexIDs[rotationIndices]
+            self.vertexLocs = self.rawFace.vertexLocs[rotationIndices]
             // self.rotatedVertexIDtoIndexDict -> unclear if we need this in interim step
-            self.edgeVertexIDs = self.rawSimpleFace.edgeVertexIDs[rotationIndices]
-            self.edgeVertexLocs = self.rawSimpleFace.edgeVertexLocs[rotationIndices]
-            self.edgeIDs = self.rawSimpleFace.edgeIDs[rotationIndices]
-            self.edgeVectors = self.rawSimpleFace.edgeVectors[rotationIndices]
-            self.edgeUnitVectors = self.rawSimpleFace.edgeUnitVectors[rotationIndices]
+            self.edgeVertexIDs = self.rawFace.edgeVertexIDs[rotationIndices]
+            self.edgeVertexLocs = self.rawFace.edgeVertexLocs[rotationIndices]
+            self.edgeIDs = self.rawFace.edgeIDs[rotationIndices]
+            self.edgeVectors = self.rawFace.edgeVectors[rotationIndices]
+            self.edgeUnitVectors = self.rawFace.edgeUnitVectors[rotationIndices]
             // definitely don't need the plane normal
-            self.inwardEdgeUnitNormals = self.rawSimpleFace.inwardEdgeUnitNormals[rotationIndices]
-            self.vertexAdjEdgeVectors = self.rawSimpleFace.vertexAdjEdgeVectors[rotationIndices]
+            self.inwardEdgeUnitNormals = self.rawFace.inwardEdgeUnitNormals[rotationIndices]
+            self.vertexAdjEdgeVectors = self.rawFace.vertexAdjEdgeVectors[rotationIndices]
         } else {
-            self.vertexIDs = self.rawSimpleFace.vertexIDs
-            self.vertexLocs = self.rawSimpleFace.vertexLocs
-            self.edgeVertexIDs = self.rawSimpleFace.edgeVertexIDs
-            self.edgeVertexLocs = self.rawSimpleFace.edgeVertexLocs
-            self.edgeIDs = self.rawSimpleFace.edgeIDs
-            self.edgeVectors = self.rawSimpleFace.edgeVectors
-            self.edgeUnitVectors = self.rawSimpleFace.edgeUnitVectors
-            self.inwardEdgeUnitNormals = self.rawSimpleFace.inwardEdgeUnitNormals
-            self.vertexAdjEdgeVectors = self.rawSimpleFace.vertexAdjEdgeVectors            
+            self.vertexIDs = self.rawFace.vertexIDs
+            self.vertexLocs = self.rawFace.vertexLocs
+            self.edgeVertexIDs = self.rawFace.edgeVertexIDs
+            self.edgeVertexLocs = self.rawFace.edgeVertexLocs
+            self.edgeIDs = self.rawFace.edgeIDs
+            self.edgeVectors = self.rawFace.edgeVectors
+            self.edgeUnitVectors = self.rawFace.edgeUnitVectors
+            self.inwardEdgeUnitNormals = self.rawFace.inwardEdgeUnitNormals
+            self.vertexAdjEdgeVectors = self.rawFace.vertexAdjEdgeVectors            
         }
 
         // figure out if non-center vertices need to be flipped
@@ -471,11 +471,11 @@ class StarSimpleFace{
 
 //Star object that contains information on adjacent satellite vertices, faces, and face region vectors
 class Star {
-    init (vertexHelperObj, simpleFaceHelperObj, centerIndex) {
+    init (vertexHelperObj, faceHelperObj, centerIndex) {
         self.vertexHelperObj = vertexHelperObj
-        self.simpleFaceHelperObj = simpleFaceHelperObj
-        self.faceKDObj = self.simpleFaceHelperObj.faceKDObj
-        self.edgeKDObj = self.simpleFaceHelperObj.edgeKDObj
+        self.faceHelperObj = faceHelperObj
+        self.faceKDObj = self.faceHelperObj.faceKDObj
+        self.edgeKDObj = self.faceHelperObj.edgeKDObj
         self.mesh = self.vertexHelperObj.mesh
         self.conn = self.vertexHelperObj.conn
         self.centerIndex = centerIndex
@@ -538,15 +538,15 @@ class Star {
         if (self.cyclic == true) {
             for (i in 0...self.numSatellites) {
                 if (i < self.numSatellites-1) {
-                    face = StarSimpleFace(self.simpleFaceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[i+1]])
+                    face = StarFace(self.faceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[i+1]])
                 } else {
-                    face = StarSimpleFace(self.simpleFaceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[0]])
+                    face = StarFace(self.faceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[0]])
                 }
                 faces.append(face)
             }
         } else {
             for (i in 0...self.numSatellites-1) {
-                face = StarSimpleFace(self.simpleFaceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[i+1]])
+                face = StarFace(self.faceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[i+1]])
                 faces.append(face)
             }
         }
@@ -630,11 +630,11 @@ class Star {
 
 //helper class to store list of Star object for each vertex in the mesh
 class StarHelper {
-    init (vertexHelperObj, simpleFaceHelperObj) {
+    init (vertexHelperObj, faceHelperObj) {
         self.vertexHelperObj = vertexHelperObj
-        self.simpleFaceHelperObj = simpleFaceHelperObj
-        self.faceKDObj = self.simpleFaceHelperObj.faceKDObj
-        self.edgeKDObj = self.simpleFaceHelperObj.edgeKDObj
+        self.faceHelperObj = faceHelperObj
+        self.faceKDObj = self.faceHelperObj.faceKDObj
+        self.edgeKDObj = self.faceHelperObj.edgeKDObj
         self.mesh = self.vertexHelperObj.mesh
         self.conn = self.vertexHelperObj.conn
         self.numVerts = self.vertexHelperObj.numVerts
@@ -643,7 +643,7 @@ class StarHelper {
     getStarArray() {
         var starArray = []
         for (i in 0...self.numVerts) {
-            starArray.append(Star(self.vertexHelperObj, self.simpleFaceHelperObj, i))
+            starArray.append(Star(self.vertexHelperObj, self.faceHelperObj, i))
         }
         return starArray
     }
@@ -760,13 +760,13 @@ class StarProjector{
 }
 
 class ParticleMover{
-    init (simpleFaceHelper, starProjectorObj) {
-        self.simpleFaceHelper = simpleFaceHelper
-        self.faceKDObj = simpleFaceHelper.faceKDObj
-        self.edgeKDObj = simpleFaceHelper.edgeKDObj
+    init (faceHelper, starProjectorObj) {
+        self.faceHelper = faceHelper
+        self.faceKDObj = faceHelper.faceKDObj
+        self.edgeKDObj = faceHelper.edgeKDObj
         self.starProjectorObj = starProjectorObj
-        self.mesh = simpleFaceHelper.mesh
-        self.conn = simpleFaceHelper.conn
+        self.mesh = faceHelper.mesh
+        self.conn = faceHelper.conn
     }
 
     getAdjFaces(particleInfoArr) {
@@ -776,7 +776,7 @@ class ParticleMover{
         var particleElemGrade = particleInfoArr[1]
         var particleElemID = particleInfoArr[2]
         if (particleElemGrade == 2) {
-            adjFaceArr.append(self.simpleFaceHelper.simpleFaceArr[particleElemID])
+            adjFaceArr.append(self.faceHelper.faceArr[particleElemID])
         } else {        
             if (particleElemGrade == 1) {
                 faceIndices = self.conn.ef.transpose().rowindices(particleElemID)
@@ -784,7 +784,7 @@ class ParticleMover{
                 faceIndices = self.conn.vf.transpose().rowindices(particleElemID)
             }
             for (idx in faceIndices) {
-                adjFaceArr.append(self.simpleFaceHelper.simpleFaceArr[idx])
+                adjFaceArr.append(self.faceHelper.faceArr[idx])
             }            
         }
         return adjFaceArr
@@ -797,12 +797,12 @@ class ParticleMover{
         var x = particleLoc + len/dir.norm() * dir
         var vx = len/dir.norm() * dir
         if (particleElemGrade == 2) {
-            return self.simpleFaceHelper.simpleFaceArr[particleElemID]
+            return self.faceHelper.faceArr[particleElemID]
         } else if (particleElemGrade == 1) {
-            var simpleFaceObjs = self.getAdjFaces(particleInfoArr)
-            if (simpleFaceObjs.count() == 1) {
+            var faceObjs = self.getAdjFaces(particleInfoArr)
+            if (faceObjs.count() == 1) {
                 var sharedEdgeID = particleElemID
-                var f0 = simpleFaceObjs[0]
+                var f0 = faceObjs[0]
                 var sharedEdgeIndex = f0.edgeIDtoIndexDict[sharedEdgeID]
                 var vxProj = a_remove_b(a=vx, b=f0.planeUnitNormal)
                 var yf0 = classifyInner(a=vxProj, b=f0.inwardEdgeUnitNormals[sharedEdgeIndex])
@@ -813,8 +813,8 @@ class ParticleMover{
                 }
             } else {
                 var sharedEdgeID = particleElemID
-                var f0 = simpleFaceObjs[0]
-                var f1 = simpleFaceObjs[1]
+                var f0 = faceObjs[0]
+                var f1 = faceObjs[1]
                 var sharedEdgeIndexArr = [
                     f0.edgeIDtoIndexDict[sharedEdgeID],
                     f1.edgeIDtoIndexDict[sharedEdgeID]
@@ -844,7 +844,7 @@ class ParticleMover{
         } else {
             var cf = self.starProjectorObj.getClosestFace(x=x, centerIndex=particleElemID)
             if (cf != nil) {
-                return self.simpleFaceHelper.simpleFaceArr[cf.id]
+                return self.faceHelper.faceArr[cf.id]
             } else {
                 return nil
             }
@@ -1239,10 +1239,10 @@ class Particles{
         self.kdHelper = self.testCall(KDHelper(self.mesh), "kdHelper", numTestTrials=numTestTrials)
         self.faceKD = self.testCall(FaceKDHelper(self.meshConn), "faceKD", numTestTrials=numTestTrials)
         self.edgeKD = self.testCall(EdgeKDHelper(self.meshConn), "edgeKD", numTestTrials=numTestTrials)
-        self.simpleFaceHelper = self.testCall(SimpleFaceHelper(self.faceKD, self.edgeKD), "simpleFaceHelper", numTestTrials=numTestTrials)
-        self.starHelper = self.testCall(StarHelper(self.vertexHelper, self.simpleFaceHelper), "starHelper", numTestTrials=numTestTrials)
+        self.faceHelper = self.testCall(FaceHelper(self.faceKD, self.edgeKD), "faceHelper", numTestTrials=numTestTrials)
+        self.starHelper = self.testCall(StarHelper(self.vertexHelper, self.faceHelper), "starHelper", numTestTrials=numTestTrials)
         self.starProjector = self.testCall(StarProjector(self.starHelper), "starProjector", numTestTrials=numTestTrials)
-        self.particleMover = self.testCall(ParticleMover(self.simpleFaceHelper, self.starProjector), "particleMover", numTestTrials=numTestTrials)
+        self.particleMover = self.testCall(ParticleMover(self.faceHelper, self.starProjector), "particleMover", numTestTrials=numTestTrials)
         self.forceArr = []
     }
 
