@@ -9,7 +9,6 @@ import constants
 import implicitmesh
 import "DictlikeSetOps.morpho"
 import "LinAlgTools.morpho"
-import "Tester.morpho"
 
 // get rotated list (same cyclic order, but different starting point) given delta (number of spots to advance in original list cycle)
 fn rotateList(list, delta) {return [list[mod(0+delta,3)], list[mod(1+delta,3)], list[mod(2+delta,3)]]}
@@ -1231,24 +1230,32 @@ class ParticleMover{
 }
 
 class Particles{
-    init (mesh, testerObj=nil) {
+    init (mesh, testing=false, numTestTrials=1) {
         self.mesh = mesh
-        var tester
-        if (testerObj == nil) {
-            self.tester = Tester(activeFlag=false)
-        } else {
-            self.tester = testerObj
-        }
-        self.meshConn = self.tester.call(MeshConnectivity(self.mesh))
-        self.vertexHelper = self.tester.call(VertexHelper(self.meshConn))
-        self.kdHelper = self.tester.call(KDHelper(self.mesh))
-        self.faceKD = self.tester.call(FaceKDHelper(self.meshConn))
-        self.edgeKD = self.tester.call(EdgeKDHelper(self.meshConn))
-        self.simpleFaceHelper = self.tester.call(SimpleFaceHelper(self.faceKD, self.edgeKD))
-        self.starHelper = self.tester.call(StarHelper(self.vertexHelper, self.simpleFaceHelper))
-        self.starProjector = self.tester.call(StarProjector(self.starHelper))
-        self.particleMover = self.tester.call(ParticleMover(self.simpleFaceHelper, self.starProjector))
+        self.testing = testing
+        self.testDict = Dictionary()
+        self.meshConn = self.testCall(MeshConnectivity(self.mesh), "meshConn", numTestTrials=numTestTrials)
+        self.vertexHelper = self.testCall(VertexHelper(self.meshConn), "VertexHelper", numTestTrials=numTestTrials)
+        self.kdHelper = self.testCall(KDHelper(self.mesh), "kdHelper", numTestTrials=numTestTrials)
+        self.faceKD = self.testCall(FaceKDHelper(self.meshConn), "faceKD", numTestTrials=numTestTrials)
+        self.edgeKD = self.testCall(EdgeKDHelper(self.meshConn), "edgeKD", numTestTrials=numTestTrials)
+        self.simpleFaceHelper = self.testCall(SimpleFaceHelper(self.faceKD, self.edgeKD), "simpleFaceHelper", numTestTrials=numTestTrials)
+        self.starHelper = self.testCall(StarHelper(self.vertexHelper, self.simpleFaceHelper), "starHelper", numTestTrials=numTestTrials)
+        self.starProjector = self.testCall(StarProjector(self.starHelper), "starProjector", numTestTrials=numTestTrials)
+        self.particleMover = self.testCall(ParticleMover(self.simpleFaceHelper, self.starProjector), "particleMover", numTestTrials=numTestTrials)
         self.forceArr = []
+    }
+
+    testCall(func, name, numTestTrials=1) {
+        if (self.testing == true) {
+            var start = clock()
+            var out = func
+            var end = clock()
+            self.testDict[name] = (end-start)/numTestTrials
+            return out
+        } else {
+            return func
+        }
     }
 
     getPointLocs () {

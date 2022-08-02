@@ -19,12 +19,12 @@ fn formatDict(dict, delim="!") {
     return "'${string}'"
 }
 
-fn dictToPython(dict, pyFile, xfield, version, delim="!") {
+fn dictToPython(dict, pyFile, xfield, delim="!") {
     var string = formatDict(dict, delim=delim)
-    return "python3 ${pyFile} '${xfield}' '${version}' '${string}'"
+    return "python ${pyFile} '${xfield}' '${string}'"
 }
 
-fn dictArrToPython(dictArr, pyFile, xfield, version, delim="!") {
+fn dictArrToPython(dictArr, pyFile, xfield, delim="!") {
     var superString
     var dict
     for (i in 0...dictArr.count()) {
@@ -38,13 +38,5 @@ fn dictArrToPython(dictArr, pyFile, xfield, version, delim="!") {
             superString += "${string}"
         }
     }
-    return "python3 ${pyFile} '${xfield}' '${version}' ${superString}"
+    return "python ${pyFile} '${xfield}' ${superString}"
 }
-
-//test
-// var dict = Dictionary()
-// dict["Name"] = "Sam"
-// dict["Age"] = 29
-// dict["Residence"] = "Cambridge"
-
-// system(dictToPython(dict))

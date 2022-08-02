@@ -3,39 +3,108 @@
 
 import meshtools
 import constants
+import "Particles.morpho"
+import "RandomPoints.morpho"
+import "dictToPython.morpho"
+
+fn nVertexCylinder(numVerts, r=1) {
+    var uSteps = ceil(sqrt(numVerts))
+    var vSteps = ceil(numVerts/uSteps)
+    var uInc = 2*Pi/(vSteps-1)
+    var vInc = 2*r/(uSteps-1)
+    var m = AreaMesh(fn (u, v) [
+        v,
+        r*cos(u),
+        r*sin(u)], 0...2*Pi:uInc, -r..r:vInc, closed=[true, false])
+    m.addgrade(1)
+    return m
+}
 
 class Tester{
     init(activeFlag=false) {
         self.activeFlag = activeFlag
-        self.timingDict = Dictionary()
-        self.trial
+        self.timingDictArr = []
     }
-    call(func, name=nil) {
+    setTestParams(paramsFunc) {
+        paramsFunc()
+    }
+    varyNumPoints(numPtsRng, numVerts, numTrials) {
+        self.variedParam = "numPts"
+        self.variedParamRng = numPtsRng
+        self.staticParam = "numVerts"
+        self.staticParamVal = numVerts
+        self.numTrials = numTrials
+    }
+    varyNumVerts(numVertsRng, numPts, numTrials) {
+        self.variedParam = "numVerts"
+        self.variedParamRng = numVertsRng
+        self.staticParam = "numPts"
+        self.staticParamVal = numPts
+        self.numTrials = numTrials
+    }
+    call(func, name, dict, trialNum=1) {
         if (self.activeFlag == true) {
             var start = clock()
             var out = func
-            if (name == nil) {
-                self.timingDict[String(func)] = clock()-start
+            var end = clock()
+            if (trialNum == 1) {
+                dict[name] = (end-start)/self.numTrials
             } else {
-                self.timingDict[name] = clock()-start
+                dict[name] += ((end-start)/self.numTrials)
             }
             return out
         } else {
             return func
         }
     }
-
-}
-
-fn nVertexSphere(numVerts, r=1) {
-    var uSteps = floor(sqrt(numVerts))
-    var vSteps = floor(numVerts/uSteps)
-    var uInc = Pi/(uSteps-1)
-    var vInc = 2*Pi/(vSteps-1)
-    var m = AreaMesh(fn (u, v) [
-        r*sin(u)*cos(v),
-        r*sin(u)*sin(v),
-        r*cos(u)], 0..Pi:uInc, 0..2*Pi:vInc, closed=true)
-    m.addgrade(1)
-    return m
+    testLoop(quiet=true, project=false, moveAll=false) {
+        var numScens = self.variedParamRng.count()
+        var mesh, ptsArr
+        for (i in 0...numScens) {
+            if (quiet == false) {
+                print "Starting scenario ${i+1}/${numScens}"
+            }
+            var timingDict = Dictionary()
+            if (self.variedParam == "numPts") {
+                mesh = nVertexCylinder(self.staticParamVal)
+                ptsArr = GenRandomRectangle(self.variedParamRng[i], xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
+                var numPts = ptsArr.count()
+                var numVerts = mesh.count(0)
+                timingDict[self.variedParam] = numPts       
+                timingDict[self.staticParam] = numVerts
+            } else {
+                mesh = nVertexCylinder(self.variedParamRng[i])
+                ptsArr = GenRandomRectangle(self.staticParamVal, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
+                var numPts = ptsArr.count()
+                var numVerts = mesh.count(0)
+                timingDict[self.staticParam] = numPts       
+                timingDict[self.variedParam] = numVerts
+            }
+            for (j in 1..self.numTrials) {
+                if (quiet == false) {
+                    print "Starting trial ${j}/${self.numTrials} [scenario ${i+1}/${numScens}]"
+                }
+                var p = Particles(mesh, testing=true, numTestTrials=self.numTrials)
+                if (j == 1) {
+                    for (k in p.testDict) {
+                        timingDict[k] = p.testDict[k]
+                    }
+                } else {
+                    for (k in p.testDict) {
+                        timingDict[k] += p.testDict[k]
+                    }
+                }
+                if (project == true) {
+                    self.call(p.project(ptsArr), "project", timingDict, trialNum=j)
+                }
+                if (moveAll == true) {
+                    self.call(p.moveAll(ConstantForce(Matrix([1,0,0]) + Matrix([0,0,1])), quiet=true), "moveAll", timingDict, trialNum=j)
+                }
+            }
+            self.timingDictArr.append(timingDict)
+        }
+    }
+    exportTimingDictArr() {
+        system(dictArrToPython(self.timingDictArr, "dictPlotter.py", self.variedParam, delim="!"))
+    }
 }
