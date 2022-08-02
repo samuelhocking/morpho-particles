@@ -1,3 +1,6 @@
+// Demo of process performance testing
+// By: Sam Hocking
+
 import meshtools
 import plot
 import optimize
@@ -7,7 +10,10 @@ import "Tester.morpho"
 
 var tester = Tester(activeFlag=true)
 
+// test process time by varying the number of particles
 // tester.varyNumPoints([2000..20000:2000], 1000, 5)
+
+// test process time by varying the number of mesh vertices
 tester.varyNumVerts([500..5000:500], 2000, 3)
 
 tester.testLoop(quiet=false, project=true, moveAll=true)
