@@ -81,11 +81,9 @@ class Vertex {
         var incidentEdges = self.conn.ve.transpose().rowindices(self.index)
         var neighbors = []
         for (x in incidentEdges) {
-            for (y in self.conn.ve.rowindices(x)) {
-                if (y != self.index) {
-                    neighbors.append(y)
-                }
-            }
+            var verts = self.conn.ve.rowindices(x).clone()
+            verts.remove(self.index)
+            neighbors.append(verts[0])
         }
         return neighbors
     }
@@ -385,13 +383,11 @@ class StarFace{
             var rotationIndices = rotateIndices(self.rotationDelta, adjust=true)
             self.vertexIDs = self.rawFace.vertexIDs[rotationIndices]
             self.vertexLocs = self.rawFace.vertexLocs[rotationIndices]
-            // self.rotatedVertexIDtoIndexDict -> unclear if we need this in interim step
             self.edgeVertexIDs = self.rawFace.edgeVertexIDs[rotationIndices]
             self.edgeVertexLocs = self.rawFace.edgeVertexLocs[rotationIndices]
             self.edgeIDs = self.rawFace.edgeIDs[rotationIndices]
             self.edgeVectors = self.rawFace.edgeVectors[rotationIndices]
             self.edgeUnitVectors = self.rawFace.edgeUnitVectors[rotationIndices]
-            // definitely don't need the plane normal
             self.inwardEdgeUnitNormals = self.rawFace.inwardEdgeUnitNormals[rotationIndices]
             self.vertexAdjEdgeVectors = self.rawFace.vertexAdjEdgeVectors[rotationIndices]
         } else {
