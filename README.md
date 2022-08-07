@@ -26,7 +26,7 @@ Utilities:
 Primary performance testing file:
 - particles_testing_demo.morpho
 
-And related files are to facilitate testing by exporting performance dicts in plaintext to `Python`, forming a `DataFrame`, and plotting with `matplotlib`:
+And related files to facilitate testing by exporting performance dicts in plaintext to `Python`, forming a `DataFrame`, and plotting with `matplotlib`:
 - dictImportTools.py
 - dictPlotter.py
 - dictToPython.morpho
