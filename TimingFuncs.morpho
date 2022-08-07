@@ -1,0 +1,51 @@
+// TimingFuncs
+// By: Sam Hocking
+// Requires: TakeTime.py
+//           Remove.py
+//           GetDTDiff.py
+
+    fn morphoClock(func) {
+        var start = clock()
+        var out = func
+        var end = clock()
+        var result = Object()
+        result.elapsed = end-start
+        result.out = out
+        return result
+    }
+
+    fn takeTime(filename) {
+        system("python TakeTime.py")
+        var f = File(filename)
+        var timeStr = f.readline()
+        f.close()
+        system("python Remove.py")
+        return timeStr
+    }
+
+    fn getDTDiff(startStr, endStr, filename) {
+        system("python GetDTDiff.py ${startStr} ${endStr}")
+        var f = File(filename)
+        var elapsed = Float(f.readline())
+        f.close()
+        system("python Remove.py")
+        return elapsed
+    }
+
+    fn pythonTime(func) {
+        var filename = "comm.txt"
+
+        var startStr = takeTime(filename)
+        print startStr
+
+        var out = func
+
+        var endStr = takeTime(filename)
+        print endStr
+
+        var elapsed = getDTDiff(startStr, endStr, filename)
+        var result = Object()
+        result.elapsed = elapsed
+        result.out = out
+        return result    
+    }

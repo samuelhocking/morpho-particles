@@ -123,16 +123,18 @@ torus.addgrade(1)
 var mesh = torus
 
 // generate random point cloud
-var ptsArr = GenRandomRectangle(1000, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
+var ptsArr = GenRandomRectangle(20000, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
 
 var p = Particles(mesh)
 p.project(ptsArr)
+print("done projecting")
 
 var e100 = Matrix([1,0,0])
 var e010 = Matrix([0,1,0])
 var e001 = Matrix([0,0,1])
 
 p.moveAll(ConstantForce((1*e100) + (0.5*e001)), quiet=true)
+print("done moving")
 
 var pp = ParticlePlotter(p)
 pp.plot(grade=[2], projectedPoints=true, movedPoints=true)

@@ -7,14 +7,16 @@ import optimize
 import "Particles.morpho"
 import "RandomPoints.morpho"
 import "Tester.morpho"
+import "TimingFuncs.morpho"
 
-var tester = Tester(activeFlag=true)
+var tester = Tester()
 
 // test process time by varying the number of particles
-// tester.varyNumPoints([2000..20000:2000], 1000, 5)
+tester.varyNumPoints([5000..20000:5000], 1000, 3)
 
 // test process time by varying the number of mesh vertices
-tester.varyNumVerts([500..5000:500], 2000, 3)
+// tester.varyNumVerts([500..2500:500], 2000, 3)
 
-tester.testLoop(quiet=false, project=true, moveAll=true)
+// tester.testLoop(pythonTime, quiet=false, project=true, moveAll=true)
+tester.testLoop(morphoClock, quiet=false, projectTimingFlag=true, moveAllTimingFlag=false)
 tester.exportTimingDictArr()

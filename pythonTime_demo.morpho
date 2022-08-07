@@ -1,0 +1,15 @@
+// Script to test using python for true-time timing (not clock())
+
+import "TimingFuncs.morpho"
+
+fn sleep(x){
+    return system("python Sleep.py ${x}")
+}
+
+fn printer(rng){
+    print(rng)
+}
+
+var result = pythonTime(sleep(1))
+// var result = pythonTime(printer([1..10000]))
+print result.elapsed

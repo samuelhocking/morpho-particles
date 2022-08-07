@@ -1226,29 +1226,27 @@ class ParticleMover{
 }
 
 class Particles{
-    init (mesh, testing=false, numTestTrials=1) {
+    init (mesh, testing=false, timingfunc=nil, numTestTrials=1) {
         self.mesh = mesh
         self.testing = testing
         self.testDict = Dictionary()
-        self.meshConn = self.testCall(MeshConnectivity(self.mesh), "meshConn", numTestTrials=numTestTrials)
-        self.vertexHelper = self.testCall(VertexHelper(self.meshConn), "VertexHelper", numTestTrials=numTestTrials)
-        self.kdHelper = self.testCall(KDHelper(self.mesh), "kdHelper", numTestTrials=numTestTrials)
-        self.faceKD = self.testCall(FaceKDHelper(self.meshConn), "faceKD", numTestTrials=numTestTrials)
-        self.edgeKD = self.testCall(EdgeKDHelper(self.meshConn), "edgeKD", numTestTrials=numTestTrials)
-        self.faceHelper = self.testCall(FaceHelper(self.faceKD, self.edgeKD), "faceHelper", numTestTrials=numTestTrials)
-        self.starHelper = self.testCall(StarHelper(self.vertexHelper, self.faceHelper), "starHelper", numTestTrials=numTestTrials)
-        self.starProjector = self.testCall(StarProjector(self.starHelper), "starProjector", numTestTrials=numTestTrials)
-        self.particleMover = self.testCall(ParticleMover(self.faceHelper, self.starProjector), "particleMover", numTestTrials=numTestTrials)
+        self.meshConn = self.testCall(func=MeshConnectivity(self.mesh), timingfunc=timingfunc, name="meshConn", numTestTrials=numTestTrials)
+        self.vertexHelper = self.testCall(func=VertexHelper(self.meshConn), timingfunc=timingfunc, name="VertexHelper", numTestTrials=numTestTrials)
+        self.kdHelper = self.testCall(func=KDHelper(self.mesh), timingfunc=timingfunc, name="kdHelper", numTestTrials=numTestTrials)
+        self.faceKD = self.testCall(func=FaceKDHelper(self.meshConn), timingfunc=timingfunc, name="faceKD", numTestTrials=numTestTrials)
+        self.edgeKD = self.testCall(func=EdgeKDHelper(self.meshConn), timingfunc=timingfunc, name="edgeKD", numTestTrials=numTestTrials)
+        self.faceHelper = self.testCall(func=FaceHelper(self.faceKD, self.edgeKD), timingfunc=timingfunc, name="faceHelper", numTestTrials=numTestTrials)
+        self.starHelper = self.testCall(func=StarHelper(self.vertexHelper, self.faceHelper), timingfunc=timingfunc, name="starHelper", numTestTrials=numTestTrials)
+        self.starProjector = self.testCall(func=StarProjector(self.starHelper), timingfunc=timingfunc, name="starProjector", numTestTrials=numTestTrials)
+        self.particleMover = self.testCall(func=ParticleMover(self.faceHelper, self.starProjector), timingfunc=timingfunc, name="particleMover", numTestTrials=numTestTrials)
         self.forceArr = []
     }
 
-    testCall(func, name, numTestTrials=1) {
+    testCall(func=func, timingfunc=nil, name=nil, numTestTrials=1) {
         if (self.testing == true) {
-            var start = clock()
-            var out = func
-            var end = clock()
-            self.testDict[name] = (end-start)/numTestTrials
-            return out
+            var result = timingfunc(func)
+            self.testDict[name] = (result.elapsed)/numTestTrials
+            return result.out
         } else {
             return func
         }
