@@ -11,16 +11,21 @@ Place Particles.morpho in the same directory as the `Morpho` script that require
 import "Particles.morpho"
 ```
 
-Two files are included to demo particle projection and movement:
+Particle projection and movement demonstrations:
 - particles_demo.morpho
 - particles_thomson_demo.morpho
 
-Another file is included to facilitate the generation of arbitrary projectable points:
+Utilities:
 - RandomPoints.morpho
+- DictlikeSetOps.morpho
+- LinAlgTools.morpho
+- MeshChecker.morpho
+- Tester.morpho
 
-The other included files are to facilitate testing of the `Particles` module by exporting performance dicts in plaintext to `Python`, forming a `DataFrame`, and plotting with `matplotlib`:
+Primary performance testing file:
+- particles_testing_demo.morpho
+
+And related files are to facilitate testing by exporting performance dicts in plaintext to `Python`, forming a `DataFrame`, and plotting with `matplotlib`:
 - dictImportTools.py
 - dictPlotter.py
 - dictToPython.morpho
-
-The testing script is under revision and currently unavailable.
