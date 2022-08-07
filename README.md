@@ -10,6 +10,7 @@ Place Particles.morpho in the same directory as the `Morpho` script that require
 ```
 import "Particles.morpho"
 ```
+### Contents
 
 Particle projection and movement demonstrations:
 - particles_demo.morpho
