@@ -10,6 +10,8 @@ fn printer(rng){
     print(rng)
 }
 
-var result = pythonTime(sleep(1))
+// var result = pythonTime(sleep(1))
 // var result = pythonTime(printer([1..1000]))
+// var result = pythonTime2(printer([1..1000]))
+var result = morphoClock(printer([1..1000]))
 print result.elapsed
