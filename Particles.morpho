@@ -1225,7 +1225,7 @@ class ParticleMover{
     }
 }
 
-class Particles{
+class Particles {
     init (mesh, testing=false, timingfunc=nil, numTestTrials=1) {
         self.mesh = mesh
         self.testing = testing
