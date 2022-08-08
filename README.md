@@ -81,6 +81,8 @@ Projecting points in space onto the mesh surface is also simple. Call the `proje
 p.project(ptsArr)
 ```
 
+(Under construction)
+
 ## Movement
 
 ### moveAll
