@@ -11,5 +11,5 @@ fn printer(rng){
 }
 
 var result = pythonTime(sleep(1))
-// var result = pythonTime(printer([1..10000]))
+// var result = pythonTime(printer([1..1000]))
 print result.elapsed
