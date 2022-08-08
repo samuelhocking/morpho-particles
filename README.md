@@ -83,12 +83,44 @@ p.project(ptsArr)
 
 (Under construction)
 
+## Forces
+
+The `Particles` module offers multiple force objects.
+
+### Pairwise
+
+`PairwiseForce` computes a force based on the locations of a pair of particles
+
+### SinglePosition
+
+`SinglePositionForce` computes a force based on the location of a single particle
+
+### Constant
+
+`ConstantForce` computes a constant force
+
 ## Movement
+
+Force vectors can be applied to move particle either in two ways.
 
 ### moveAll
 
+`moveAll` computes the set of force vectors for the entire set of vectors at once, then moves them sequentially. Calling `moveAll` will take one step of the specified force.
+```
+p.moveAll(ConstantForce(Matrix([1,0,0])), stepsize=1, quiet=true)
+```
+
 ### moveAllLoop
+
+`moveAllLoop` takes a specified number of `moveAll` steps.
+```
+p.moveAllLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
+```
 
 ### moveOneByOne
 
+`moveOneByOne` computes one force vector at a time, moves that particles, then calculates the next force vector. It has the same arguments as `moveAll`.
+
 ### moveOneByOneLoop
+
+`moveOneByOneLoop` takes a specified number of `moveOneByOne` steps and has the same arguments as `moveAllLoop`.
