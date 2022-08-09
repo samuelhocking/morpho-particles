@@ -78,7 +78,7 @@ torus.addgrade(1)
 var mesh = torus
 
 // generate random point cloud
-var ptsArr = GenRandomRectangle(20000, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
+var ptsArr = GenRandomRectangle(1000, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
 
 var p = Particles(mesh)
 p.project(ptsArr)
