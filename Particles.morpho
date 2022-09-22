@@ -1240,6 +1240,19 @@ class Particles {
         self.starProjector = self.testCall(func=StarProjector(self.starHelper), timingfunc=timingfunc, name="starProjector", numTestTrials=numTestTrials)
         self.particleMover = self.testCall(func=ParticleMover(self.faceHelper, self.starProjector), timingfunc=timingfunc, name="particleMover", numTestTrials=numTestTrials)
         self.forceArr = []
+        self.projectablePoints = nil
+        self.projectedPoints = nil
+        self.movedPoints = nil
+        self.points = nil
+        self.pointLocs = nil
+    }
+
+    resetPoints() {
+        if (self.projectablePoints != nil) {self.projectablePoints = nil}
+        if (self.projectedPoints != nil) {self.projectedPoints = nil}
+        if (self.movedPoints != nil) {self.movedPoints = nil}
+        if (self.points != nil) {self.points = nil}
+        if (self.pointLocs != nil) {self.pointLocs = nil}
     }
 
     testCall(func=func, timingfunc=nil, name=nil, numTestTrials=1) {
