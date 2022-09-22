@@ -687,10 +687,6 @@ class StarProjector{
     getClosestMeshPt(x=nil, centerIndex=nil, threshold=1e-8) {
         var star = self.starHelperObj.starArray[centerIndex]
         var closestFace = self.getClosestFace(x=x, centerIndex=centerIndex, threshold=threshold)
-        var cornerLocs = [
-            closestFace.vertexLocs[1],
-            closestFace.vertexLocs[2]
-        ]
         var vx = x - star.centerLoc
         var yf1, yf2, ype1, ype2, ye1, ye2, vx_sn_proj, vx_fin_proj, x_fin_proj, elemGrade, elemID
         if (closestFace != nil) {
@@ -1278,6 +1274,7 @@ class Particles {
         var projectedPoints = []
         for (x in points) {
             var p_c = self.kdHelper.tree.nearest(x).id
+            print self.mesh.vertexposition(p_c).transpose()
             projectedPoints.append(self.starProjector.getClosestMeshPt(x=x, centerIndex=p_c))
         }
         self.projectedPoints = projectedPoints
