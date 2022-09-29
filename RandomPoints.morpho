@@ -28,6 +28,14 @@ fn GenRandomRectangle(numPts, xBounds=nil, yBounds=nil, zBounds=nil) {
     }
     return ptsArr
 }
+fn GenParametrizedLine(function, tStart=0, tEnd=1, numPts=10) {
+    var func = function
+    var ptsArr = []
+    for (t in 0...numPts) {
+        ptsArr.append(func(tStart + t*(tEnd-tStart)/(numPts-1)))
+    }
+    return ptsArr
+}
 
 fn GenParametrizedBall(r=1, usteps=5, vsteps=5, wsteps=5) {
     // u: steps along longitudinal arc
