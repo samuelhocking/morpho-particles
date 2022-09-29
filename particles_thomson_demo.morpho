@@ -8,8 +8,8 @@ import "Particles.morpho"
 import "RandomPoints.morpho"
 
 //Sphere
-// var mesh = Mesh("sphere_r_0.751501_vol_1_194_vertices.mesh")
-var mesh = Mesh("sphere_r_0.751501_vol_1_770_vertices.mesh")
+// var mesh = Mesh("sphere_r_0.62035_vol_1_194_vertices.mesh")
+var mesh = Mesh("sphere_r_0.62035_vol_1_770_vertices.mesh")
 
 var ptsArr = GenRandomSphere(60, r=1)
 

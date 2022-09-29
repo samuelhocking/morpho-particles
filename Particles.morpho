@@ -1266,7 +1266,11 @@ class Particles {
         for (x in self.points) {
             pointLocs.append(x.particleinfo[0])
         }
-        self.pointLocs = pointLocs
+        return pointLocs
+    }
+
+    updatePointLocs () {
+        self.pointLocs = self.getPointLocs()
     }
 
     project (points) {
@@ -1278,7 +1282,7 @@ class Particles {
         }
         self.projectedPoints = projectedPoints
         self.points = projectedPoints
-        self.getPointLocs()
+        self.updatePointLocs()
     }
     moveAll (force, stepsize=1, quiet=true) {
         var movedPointsInfo = []
@@ -1304,7 +1308,7 @@ class Particles {
         }
         self.movedPoints = movedPointsInfo
         self.points = movedPointsInfo
-        self.getPointLocs()
+        self.updatePointLocs()
     }
     moveAllLoop (steps, force, stepsize=1, stepQuiet=true, loopQuiet=true) {
         for (i in 1..steps) {
