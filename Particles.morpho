@@ -1237,16 +1237,22 @@ class Particles {
         self.particleMover = self.testCall(func=ParticleMover(self.faceHelper, self.starProjector), timingfunc=timingfunc, name="particleMover", numTestTrials=numTestTrials)
         self.forceArr = []
         self.projectablePoints = nil
+        self.projectablePointLocs = nil
         self.projectedPoints = nil
+        self.projectedPointLocs = nil
         self.movedPoints = nil
+        self.movedPointLocs = nil
         self.points = nil
         self.pointLocs = nil
     }
 
     resetPoints() {
         if (self.projectablePoints != nil) {self.projectablePoints = nil}
+        if (self.projectablePointLocs != nil) {self.projectablePointLocs = nil}
         if (self.projectedPoints != nil) {self.projectedPoints = nil}
+        if (self.projectedPointLocs != nil) {self.projectedPointLocs = nil}
         if (self.movedPoints != nil) {self.movedPoints = nil}
+        if (self.movedPointLocs != nil) {self.movedPointLocs = nil}
         if (self.points != nil) {self.points = nil}
         if (self.pointLocs != nil) {self.pointLocs = nil}
     }
@@ -1261,17 +1267,17 @@ class Particles {
         }
     }
 
-    getPointLocs () {
-        var pointLocs = []
-        for (x in self.points) {
-            pointLocs.append(x.particleinfo[0])
+    getLocs (ptsVar) {
+        var locs = []
+        for (x in ptsVar) {
+            locs.append(x.particleinfo[0])
         }
-        return pointLocs
+        return locs
     }
 
-    updatePointLocs () {
-        self.pointLocs = self.getPointLocs()
-    }
+    // updatePointLocs (ptsVar) {
+    //     self.pointLocs = self.getPointLocs()
+    // }
 
     project (points) {
         self.projectablePoints = points
@@ -1281,8 +1287,9 @@ class Particles {
             projectedPoints.append(self.starProjector.getClosestMeshPt(x=x, centerIndex=p_c))
         }
         self.projectedPoints = projectedPoints
+        self.projectedPointLocs = self.getLocs(self.projectedPoints)
         self.points = projectedPoints
-        self.updatePointLocs()
+        self.pointLocs = self.getLocs(self.points)
     }
     moveAll (force, stepsize=1, quiet=true) {
         var movedPointsInfo = []
@@ -1307,8 +1314,9 @@ class Particles {
             movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
         }
         self.movedPoints = movedPointsInfo
+        self.movedPointLocs = self.getLocs(self.movedPoints)
         self.points = movedPointsInfo
-        self.updatePointLocs()
+        self.pointLocs = self.getLocs(self.points)
     }
     moveAllLoop (steps, force, stepsize=1, stepQuiet=true, loopQuiet=true) {
         for (i in 1..steps) {
@@ -1346,6 +1354,7 @@ class Particles {
             pointLocs[i] = movedx.particleinfo[0]
         }
         self.movedPoints = points
+        self.movedPointLocs = pointLocs
         self.points = points
         self.pointLocs = pointLocs
     }
