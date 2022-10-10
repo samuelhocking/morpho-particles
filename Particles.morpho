@@ -742,11 +742,9 @@ class StarProjector{
             elemID = centerIndex
         }
         var result = Object()
-        result.particleinfo = [
-            x_fin_proj,
-            elemGrade,
-            elemID
-        ]
+        result.loc = x_fin_proj
+        result.elemGrade = elemGrade
+        result.elemID = elemID
         return result
     }
 }
@@ -761,12 +759,9 @@ class ParticleMover{
         self.conn = faceHelper.conn
     }
 
-    getAdjFaces(particleInfoArr) {
+    getAdjFaces(particleLoc, particleElemGrade, particleElemID) {
         var faceIndices
         var adjFaceArr = []
-        var particleLoc = particleInfoArr[0]
-        var particleElemGrade = particleInfoArr[1]
-        var particleElemID = particleInfoArr[2]
         if (particleElemGrade == 2) {
             adjFaceArr.append(self.faceHelper.faceArr[particleElemID])
         } else {        
@@ -782,16 +777,13 @@ class ParticleMover{
         return adjFaceArr
     }
 
-    getClosestFace (particleInfoArr, dir, len) {
-        var particleLoc = particleInfoArr[0]
-        var particleElemGrade = particleInfoArr[1]
-        var particleElemID = particleInfoArr[2]
+    getClosestFace (particleLoc, particleElemGrade, particleElemID, dir, len) {
         var x = particleLoc + len/dir.norm() * dir
         var vx = len/dir.norm() * dir
         if (particleElemGrade == 2) {
             return self.faceHelper.faceArr[particleElemID]
         } else if (particleElemGrade == 1) {
-            var faceObjs = self.getAdjFaces(particleInfoArr)
+            var faceObjs = self.getAdjFaces(particleLoc, particleElemGrade, particleElemID)
             if (faceObjs.count() == 1) {
                 var sharedEdgeID = particleElemID
                 var f0 = faceObjs[0]
@@ -843,49 +835,6 @@ class ParticleMover{
         }
     }
 
-    movementLoop(particleInfoArr, dir, len, quiet=true) {
-        var particleLoc = particleInfoArr[0]
-        var particleElemGrade = particleInfoArr[1]
-        var particleElemID = particleInfoArr[2]
-        var particleInfoArr = [
-            particleLoc,
-            particleElemGrade,
-            particleElemID
-        ]
-        var result
-        if (quiet == false) {
-            print "---------------------------------------"
-            print "starting:"
-            print "loc:          ${[particleLoc[0], particleLoc[1], particleLoc[2]]}"
-            print "elemGrade:    ${particleElemGrade}"
-            print "elemID:       ${particleElemID}"
-            print "dir:          ${[dir[0],dir[1],dir[2]]}"
-            print "len:          ${len}"
-            print "---------------------------------------"
-            print "\n"
-        }
-        if (abs(len) < 1e-12) {
-            result = Object()
-            result.particleinfo = [
-                    particleLoc,
-                    particleElemGrade,
-                    particleElemID
-                ]
-            result.vectDir = dir
-            result.vectLen = len            
-        } else {
-            var vectDir = dir/dir.norm()
-            var vectLen = len
-            while (abs(vectLen) > 1e-12) {
-                result = self.movementStep(particleInfoArr, vectDir, vectLen, quiet)
-                particleInfoArr = result.particleinfo
-                vectDir = result.vectDir
-                vectLen = result.vectLen
-            }
-        }
-        return result
-    }
-
     getEdgeClassificationUnitVectors(particleLoc, closestFace) {
         var v_x_corners = [
             (closestFace.vertexLocs[0] - particleLoc)/(closestFace.vertexLocs[0] - particleLoc).norm(),
@@ -914,30 +863,21 @@ class ParticleMover{
         return edgeClassificationVectors
     }
 
-    moveNowhere(particleInfoArr, dir) {
-        var particleLoc = particleInfoArr[0]
-        var particleElemGrade = particleInfoArr[1]
-        var particleElemID = particleInfoArr[2]
+    moveNowhere(particleLoc, particleElemGrade, particleElemID, dir) {
         var result = Object()
-        result.particleinfo = [
-                particleLoc,
-                particleElemGrade,
-                particleElemID
-            ]
+        result.loc = particleLoc
+        result.elemGrade = particleElemGrade
+        result.elemID = particleElemID
         result.vectDir = dir
         result.vectLen = 0
         return result
     }
 
-    moveTowardsVertex(particleInfoArr, dir, len, vx_proj, tgtVertexID, pathElemGrade, pathElemID) {
+    moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, pathElemGrade, pathElemID) {
         var unit_vx_proj = vx_proj/vx_proj.norm()
-        var particleLoc = particleInfoArr[0]
-        var particleElemGrade = particleInfoArr[1]
-        var particleElemID = particleInfoArr[2]
         var movementVect, endingElemGrade, endingElemID
         var result = Object()
         var tgtVertexLoc = self.mesh.vertexposition(tgtVertexID)
-        // compute allowed movement vector and allowed length to move particle to the tgtVertex
         var allowedMovementVect = tgtVertexLoc - particleLoc
         var allowedLen = allowedMovementVect.norm()
         if (allowedLen > len) { // if allowed length is longer than vx_proj, particle will stay in originating element grade
@@ -949,20 +889,15 @@ class ParticleMover{
             endingElemGrade = 0
             endingElemID = tgtVertexID
         }
-        result.particleinfo = [
-                particleLoc + movementVect,
-                endingElemGrade,
-                endingElemID
-            ]
+        result.loc = particleLoc + movementVect
+        result.elemGrade = endingElemGrade
+        result.elemID = endingElemID
         result.vectDir = dir
         result.vectLen = len - movementVect.norm()
         return result
     }
 
-    moveTowardsEdge(particleInfoArr, dir, len, vx_proj, closestFace, tgtEdgeID) {
-        var particleLoc = particleInfoArr[0]
-        var particleElemGrade = particleInfoArr[1]
-        var particleElemID = particleInfoArr[2]
+    moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, closestFace, tgtEdgeID) {
         var movementVect, endingElemGrade, endingElemID
         var result = Object()
         var unit_vx_proj = vx_proj/vx_proj.norm()
@@ -997,21 +932,19 @@ class ParticleMover{
             endingElemGrade = 1
             endingElemID = tgtEdgeID
         }
-        result.particleinfo = [
-                particleLoc + movementVect,
-                endingElemGrade,
-                endingElemID
-            ]
+        result.loc = particleLoc + movementVect
+        result.elemGrade = endingElemGrade
+        result.elemID = endingElemID
         result.vectDir = dir
         result.vectLen = len - movementVect.norm()
         return result
     }
 
-    movementStep(particleInfoArr, dir, len, quiet) {
-        var particleLoc = particleInfoArr[0]
-        var particleElemGrade = particleInfoArr[1]
-        var particleElemID = particleInfoArr[2]
-        var closestFace = self.getClosestFace(particleInfoArr, dir, len)
+    movementStep(point, dir, len, quiet) {
+        var particleLoc = point.loc
+        var particleElemGrade = point.elemGrade
+        var particleElemID = point.elemID
+        var closestFace = self.getClosestFace(particleLoc, particleElemGrade, particleElemID, dir, len)
         var unit_vx = dir/dir.norm()
         var vx = len*unit_vx
         var result, printTag
@@ -1019,7 +952,7 @@ class ParticleMover{
             var vx_proj = a_remove_b(a=vx, b=closestFace.planeUnitNormal)
             if (vx_proj.norm() < 1e-8) { // SECTION 1A: ||VX_PROJ|| = 0
                 printTag = "1A"
-                result = self.moveNowhere(particleInfoArr, dir)
+                result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
             } else { // SECTION 1B: ||VX_PROJ|| > 0
                 var unit_vx_proj = vx_proj/vx_proj.norm()
                 var v_x_corners = [
@@ -1041,7 +974,7 @@ class ParticleMover{
                 }
                 if (tgtVertexID != nil) { // SECTION 1B1: VX_PROJ heading straight at a vertex
                     printTag = "1B1"
-                    result = self.moveTowardsVertex(particleInfoArr, dir, len, vx_proj, tgtVertexID, particleElemGrade, particleElemID)
+                    result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, particleElemGrade, particleElemID)
                 } else { // SECTION 1B2: VX_PROJ heading at an edge
                     var edgeClassificationVectors = self.getEdgeClassificationUnitVectors(particleLoc, closestFace)
                     var yeArr = [
@@ -1066,7 +999,7 @@ class ParticleMover{
                             break
                         }
                     }
-                    result = self.moveTowardsEdge(particleInfoArr, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
+                    result = self.moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
                 }
             }
         } else if (particleElemGrade == 1) { // SECTION 2: PARTICLE GRADE 1 (EDGE)
@@ -1080,7 +1013,7 @@ class ParticleMover{
                 var vx_proj = a_proj_b(a=vx, b=edgeVector)
                 if (vx_proj.norm() < 1e-8) { // SECTION 2A1: ||VX_PROJ|| = 0
                     printTag = "2A1"
-                    result = self.moveNowhere(particleInfoArr, dir)
+                    result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
                 } else { // SECTION 2A2: ||VX_PROJ|| > 0
                     var unit_vx_proj = vx_proj/vx_proj.norm()
                     var tgtVertexID, tgtVertexLoc
@@ -1090,13 +1023,13 @@ class ParticleMover{
                         tgtVertexID = edgeVertexIDs[0]
                     }
                     printTag = "2A2"
-                    result = self.moveTowardsVertex(particleInfoArr, dir, len, vx_proj, tgtVertexID, particleElemGrade, particleElemID)
+                    result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, particleElemGrade, particleElemID)
                 }
             } else { // SECTION 2B: there is a closest face, particle will not move on the edge
                 var vx_proj = a_remove_b(a=vx, b=closestFace.planeUnitNormal)
                 if (vx_proj.norm() < 1e-8) { // SECTION 2B1: ||VX_PROJ|| = 0
                     printTag = "2B1"
-                    result = self.moveNowhere(particleInfoArr, dir)
+                    result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
                 } else { // SECTION 2B2: ||VX_PROJ|| > 0
                     var unit_vx_proj = vx_proj/vx_proj.norm()
                     var edgeIdx = closestFace.edgeIDtoIndexDict[particleElemID]
@@ -1114,7 +1047,7 @@ class ParticleMover{
                     if (classifyParallel(a=unit_vx_proj, b=vx_oppVertex) == 1) { // SECTION 2B2a: vx_proj is heading straight towards the vertex opposite the starting edge
                         var tgtVertexID = oppVertexID
                         printTag = "2B2a"
-                        result = self.moveTowardsVertex(particleInfoArr, dir, len, vx_proj, tgtVertexID, 2, closestFace.id)
+                        result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, 2, closestFace.id)
                     } else { // SECTION 2B2b: vx_proj is heading towards one of the other two edges (not the starting edge)
                         var edgeClassificationVectors = self.getEdgeClassificationUnitVectors(particleLoc, closestFace)
                         var otherEdgeIndices = closestFace.vertexAdjEdgeIndices[oppVertexIdx]
@@ -1140,19 +1073,19 @@ class ParticleMover{
                             printTag = "2B2b1b"
                             tgtEdgeID = closestFace.edgeIDs[otherEdgeIndices[1]]
                         }
-                        result = self.moveTowardsEdge(particleInfoArr, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
+                        result = self.moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
                     }
                 }
             }
         } else { // SECTION 3: PARTICLE GRADE 0 (VERTEX)
             if (closestFace == nil) { // SECTION 3A: no closest face -> particle will stay at the vertex
                 printTag = "3A"
-                result = self.moveNowhere(particleInfoArr, dir)
+                result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
             } else { // SECTION 3B: Closest face -> particle will move off vertex          
                 var vx_proj = a_remove_b(a=vx, b=closestFace.planeUnitNormal)
                 if (vx_proj.norm() < 1e-8) { // SECTION 3B1: ||VX_PROJ|| = 0
                     printTag = "3B1"
-                    result = self.moveNowhere(particleInfoArr, dir)
+                    result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
                 } else { // SECTION 3B2: ||VX_PROJ|| > 0
                     var unit_vx_proj = vx_proj/vx_proj.norm()
                     var vertexIndex = closestFace.vertexIDtoIndexDict[particleElemID]
@@ -1167,7 +1100,7 @@ class ParticleMover{
                         var tgtEdgeIdx = closestFace.vertexOppEdgeIndices[vertexIndex]
                         var tgtEdgeID = closestFace.edgeIDs[tgtEdgeIdx]
                         printTag = "3B2a"
-                        result = self.moveTowardsEdge(particleInfoArr, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
+                        result = self.moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
                     } else { // SECTION 3B2a: vx_proj is on one of the edges (or outside and needs to be projected back) and going towards
                         var tgtVertexIdx, tgtVertexID, vx_fin_proj, pathEdgeID
                         if ((ye0 == 1) && (yi0 == 0)) { // SECTION 3B2b1: vx_proj strictly on edge 0
@@ -1197,9 +1130,9 @@ class ParticleMover{
                         }
                         if (tgtVertexIdx != nil) {
                             tgtVertexID = closestFace.vertexIDs[tgtVertexIdx]
-                            result = self.moveTowardsVertex(particleInfoArr, dir, len, vx_fin_proj, tgtVertexID, 1, pathEdgeID)
+                            result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_fin_proj, tgtVertexID, 1, pathEdgeID)
                         } else {
-                            result = self.moveNowhere(particleInfoArr, dir)
+                            result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
                         }
                     }
                 }
@@ -1209,9 +1142,9 @@ class ParticleMover{
             print "---------------------------------------"
             print "result:"
             print "logic branch: ${printTag}"
-            print "loc:          ${[result.particleinfo[0][0], result.particleinfo[0][1], result.particleinfo[0][2]]}"
-            print "elemGrade:    ${result.particleinfo[1]}"
-            print "elemID:       ${result.particleinfo[2]}"
+            print "loc:          ${[result.loc[0], result.loc[1], result.loc[2]]}"
+            print "elemGrade:    ${result.elemGrade}"
+            print "elemID:       ${result.elemID}"
             print "dir:          ${[result.vectDir[0],result.vectDir[1],result.vectDir[2]]}"
             print "len:          ${result.vectLen}"
             print "---------------------------------------"
@@ -1219,81 +1152,109 @@ class ParticleMover{
         }
         return result
     }
+
+    movementLoop(point, dir, len, quiet=true) {
+        var particleLoc = point.loc
+        var particleElemGrade = point.elemGrade
+        var particleElemID = point.elemID
+        if (quiet == false) {
+            print "---------------------------------------"
+            print "starting:"
+            print "loc:          ${[particleLoc[0], particleLoc[1], particleLoc[2]]}"
+            print "elemGrade:    ${particleElemGrade}"
+            print "elemID:       ${particleElemID}"
+            print "dir:          ${[dir[0],dir[1],dir[2]]}"
+            print "len:          ${len}"
+            print "---------------------------------------"
+            print "\n"
+        }
+        if (abs(len) < 1e-12) {
+            var point = Object()
+            point.loc = particleLoc
+            point.elemGrade = particleElemGrade
+            point.elemID = particleElemID
+            point.vectDir = dir
+            point.vectLen = len            
+        } else {
+            var vectDir = dir/dir.norm()
+            var vectLen = len
+            while (abs(vectLen) > 1e-12) {
+                point = self.movementStep(point, vectDir, vectLen, quiet)
+                vectDir = point.vectDir
+                vectLen = point.vectLen
+            }
+        }
+        return point
+    }
 }
 
-class Particles {
+class Substrate {
     init (mesh, testing=false, timingfunc=nil, numTestTrials=1) {
         self.mesh = mesh
         self.testing = testing
         self.testDict = Dictionary()
-        self.meshConn = self.testCall(func=MeshConnectivity(self.mesh), timingfunc=timingfunc, name="meshConn", numTestTrials=numTestTrials)
-        self.vertexHelper = self.testCall(func=VertexHelper(self.meshConn), timingfunc=timingfunc, name="VertexHelper", numTestTrials=numTestTrials)
-        self.kdHelper = self.testCall(func=KDHelper(self.mesh), timingfunc=timingfunc, name="kdHelper", numTestTrials=numTestTrials)
-        self.faceKD = self.testCall(func=FaceKDHelper(self.meshConn), timingfunc=timingfunc, name="faceKD", numTestTrials=numTestTrials)
-        self.edgeKD = self.testCall(func=EdgeKDHelper(self.meshConn), timingfunc=timingfunc, name="edgeKD", numTestTrials=numTestTrials)
-        self.faceHelper = self.testCall(func=FaceHelper(self.faceKD, self.edgeKD), timingfunc=timingfunc, name="faceHelper", numTestTrials=numTestTrials)
-        self.starHelper = self.testCall(func=StarHelper(self.vertexHelper, self.faceHelper), timingfunc=timingfunc, name="starHelper", numTestTrials=numTestTrials)
-        self.starProjector = self.testCall(func=StarProjector(self.starHelper), timingfunc=timingfunc, name="starProjector", numTestTrials=numTestTrials)
-        self.particleMover = self.testCall(func=ParticleMover(self.faceHelper, self.starProjector), timingfunc=timingfunc, name="particleMover", numTestTrials=numTestTrials)
-        self.forceArr = []
-        self.projectablePoints = nil
-        self.projectablePointLocs = nil
+        self.meshConn = MeshConnectivity(self.mesh)
+        self.vertexHelper = VertexHelper(self.meshConn)
+        self.kdHelper = KDHelper(self.mesh)
+        self.faceKD = FaceKDHelper(self.meshConn)
+        self.edgeKD = EdgeKDHelper(self.meshConn)
+        self.faceHelper = FaceHelper(self.faceKD, self.edgeKD)
+        self.starHelper = StarHelper(self.vertexHelper, self.faceHelper)
+        self.starProjector = StarProjector(self.starHelper)
+        self.particleMover = ParticleMover(self.faceHelper, self.starProjector)
+    }
+}
+
+class Particles {
+    init (particlesMesh) {
+        self.numPoints = particlesMesh.count(0)
+        self.projectablePoints = particlesMesh.clone()
+        self.projectablePointLocs = particlesMesh.vertexmatrix().clone()
         self.projectedPoints = nil
         self.projectedPointLocs = nil
+        self.projectedPointDetails = nil
         self.movedPoints = nil
         self.movedPointLocs = nil
+        self.movedPointDetails = nil
         self.points = nil
         self.pointLocs = nil
+        self.pointDetails = nil
     }
 
-    resetPoints() {
-        if (self.projectablePoints != nil) {self.projectablePoints = nil}
-        if (self.projectablePointLocs != nil) {self.projectablePointLocs = nil}
-        if (self.projectedPoints != nil) {self.projectedPoints = nil}
-        if (self.projectedPointLocs != nil) {self.projectedPointLocs = nil}
-        if (self.movedPoints != nil) {self.movedPoints = nil}
-        if (self.movedPointLocs != nil) {self.movedPointLocs = nil}
-        if (self.points != nil) {self.points = nil}
-        if (self.pointLocs != nil) {self.pointLocs = nil}
+    resetPoints(particlesMesh) {
+        self.init(particlesMesh)
     }
 
-    testCall(func=func, timingfunc=nil, name=nil, numTestTrials=1) {
-        if (self.testing == true) {
-            var result = timingfunc(func)
-            self.testDict[name] = (result.elapsed)/numTestTrials
-            return result.out
-        } else {
-            return func
-        }
-    }
-
-    getLocs (ptsVar) {
-        var locs = []
-        for (x in ptsVar) {
-            locs.append(x.particleinfo[0])
-        }
-        return locs
-    }
-
-    // updatePointLocs (ptsVar) {
-    //     self.pointLocs = self.getPointLocs()
-    // }
-
-    project (points) {
-        self.projectablePoints = points
-        var projectedPoints = []
-        for (x in points) {
-            var p_c = self.kdHelper.tree.nearest(x).id
-            projectedPoints.append(self.starProjector.getClosestMeshPt(x=x, centerIndex=p_c))
+    project (SubstrateObj) {
+        var projectedPoints = self.projectablePoints.clone()
+        var projectedPointDetails = []
+        for (i in 0...self.numPoints) {
+            var x = self.projectablePointLocs.column(i)
+            var p_c = SubstrateObj.kdHelper.tree.nearest(x).id
+            var projPt = SubstrateObj.starProjector.getClosestMeshPt(x=x, centerIndex=p_c)
+            // starProjector return format:
+            /*
+            var result = Object()
+            result.loc = x_fin_proj
+            result.elemGrade = elemGrade
+            result.elemID = elemID
+            return result
+            */
+            projectedPointDetails.append(projPt)
+            projectedPoints.vertexmatrix().setcolumn(i, projPt.loc)
         }
         self.projectedPoints = projectedPoints
-        self.projectedPointLocs = self.getLocs(self.projectedPoints)
-        self.points = projectedPoints
-        self.pointLocs = self.getLocs(self.points)
+        self.projectedPointLocs = projectedPoints.vertexmatrix()
+        self.projectedPointDetails = projectedPointDetails
+        self.points = self.projectedPoints.clone()
+        self.pointLocs = self.projectedPointLocs.clone()
+        self.pointDetails = self.projectedPointDetails.clone()
     }
-    moveAll (force, stepsize=1, quiet=true) {
-        var movedPointsInfo = []
-        var forceMatrix = force.getForceMatrix(self.pointLocs)
+
+    moveAll (SubstrateObj, force, stepsize=1, quiet=true) {
+        var movedPoints = self.projectedPoints.clone()
+        var movedPointDetails = []
+        var forceMatrix = force.getForceMatrix(self.pointLocs) // this will need to get tweaked later to play with Functionals
         for (i in 0...forceMatrix.dimensions()[1]) {
             var vector = stepsize*forceMatrix.column(i)
             var len = vector.norm()
@@ -1303,36 +1264,52 @@ class Particles {
             } else {
                 dir = vector
             }
-            var x = self.points[i].particleinfo
+            var x = self.pointDetails[i]
             if (quiet != true) {
-                print "Moving:  ${i+1}/${self.points.count()}"
+                print "Moving:  ${i+1}/${self.numPoints}"
                 print "dir:     ${[dir[0],dir[1],dir[2]]}"
                 print "len:     ${len}"
-                print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
-                print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"            
+                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
             }
-            movedPointsInfo.append(self.particleMover.movementLoop(x, dir, len, quiet=quiet))
+            var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
+            // movement return format:
+            /*
+            var result = Object()
+            result.loc = particleLoc + movementVect
+            result.elemGrade = endingElemGrade
+            result.elemID = endingElemID
+            result.vectDir = dir
+            result.vectLen = len - movementVect.norm()
+            return result
+            */
+            movedPointDetails.append(movedPt)
+            movedPoints.vertexmatrix().setcolumn(i, movedPt.loc)
         }
-        self.movedPoints = movedPointsInfo
-        self.movedPointLocs = self.getLocs(self.movedPoints)
-        self.points = movedPointsInfo
-        self.pointLocs = self.getLocs(self.points)
+        self.movedPoints = movedPoints
+        self.movedPointLocs = movedPoints.vertexmatrix()
+        self.movedPointDetails = movedPointDetails
+        self.points = self.movedPoints.clone()
+        self.pointLocs = self.movedPointLocs.clone()
+        self.pointDetails = self.movedPointDetails.clone()
     }
-    moveAllLoop (steps, force, stepsize=1, stepQuiet=true, loopQuiet=true) {
+
+    moveAllLoop (SubstrateObj, force, steps, stepsize=1, stepQuiet=true, loopQuiet=true) {
         for (i in 1..steps) {
             if (loopQuiet == true) {
                 if (mod(i,floor(steps/10))==0) {
                     print "movement step: ${i}"
                 }                
             }
-            self.moveAll(force, stepsize=stepsize, quiet=stepQuiet)
+            self.moveAll(SubstrateObj, force, stepsize=stepsize, quiet=stepQuiet)
         }
     }
 
-    moveOnebyOne (force, stepsize=1, quiet=true) {
+    moveOnebyOne (SubstrateObj, force, stepsize=1, quiet=true) {
         var points = self.points
         var pointLocs = self.pointLocs
-        for (i in 0...self.points.count()) {
+        var pointDetails = self.pointDetails
+        for (i in 0...self.numPoints) {
             var vector = stepsize*force.totalForce(pointLocs, i)
             var len = vector.norm()
             var dir
@@ -1341,65 +1318,66 @@ class Particles {
             } else {
                 dir = vector
             }
-            var x = points[i].particleinfo
+            var x = pointDetails[i]
             if (quiet != true) {
-                print "Moving:  ${i+1}/${self.points.count()}"
+                print "Moving:  ${i+1}/${self.numPoints}"
                 print "dir:     ${[dir[0],dir[1],dir[2]]}"
                 print "len:     ${len}"
-                print "raw pt:  ${[self.projectablePoints[i][0],self.projectablePoints[i][1],self.projectablePoints[i][2]]}"
-                print "proj pt: ${[self.projectedPoints[i].particleinfo[0][0],self.projectedPoints[i].particleinfo[0][1],self.projectedPoints[i].particleinfo[0][2]]}"            
+                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
             }
-            var movedx = self.particleMover.movementLoop(x, dir, len, quiet=quiet)
-            points[i] = movedx
-            pointLocs[i] = movedx.particleinfo[0]
+            var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
+            // movement return format:
+            /*
+            var result = Object()
+            result.loc = particleLoc + movementVect
+            result.elemGrade = endingElemGrade
+            result.elemID = endingElemID
+            result.vectDir = dir
+            result.vectLen = len - movementVect.norm()
+            return result
+            */
+            points.vertexmatrix().setcolumn(i, movedPt.loc)
+            pointLocs = points.vertexmatrix()
+            pointDetails[i] = movedPt
         }
-        self.movedPoints = points
-        self.movedPointLocs = pointLocs
         self.points = points
         self.pointLocs = pointLocs
+        self.pointDetails = pointDetails
+        self.movedPoints = points
+        self.movedPointLocs = pointLocs
+        self.movedPointDetails = pointDetails
     }
-    moveOnebyOneLoop (steps, force, stepsize=1, stepQuiet=true, loopQuiet=true) {
+    moveOnebyOneLoop (SubstrateObj, force, steps, stepsize=1, stepQuiet=true, loopQuiet=true) {
         for (i in 1..steps) {
             if (loopQuiet == true) {
                 if (mod(i,floor(steps/10))==0) {
                     print "movement step: ${i}"
                 }                
             }
-            self.moveOnebyOne(force, stepsize=stepsize, quiet=stepQuiet)
+            self.moveOnebyOne(SubstrateObj, force, stepsize=stepsize, quiet=stepQuiet)
         }
     }
 }
 
 class ParticlePlotter{
-    init(particlesObj) {
-        self.particles = particlesObj
-        self.mesh = self.particles.mesh
-    }
-    plot(grade=nil, projectablePoints=false, projectedPoints=false, movedPoints=false, quiet=false) {
-        var gMesh = plotmesh(self.mesh, grade=grade)
-        var gCombined = gMesh
-        if (grade == nil) {
-            var grade = [2]
+    plot(ParticlesObj, SubstrateObj, substrateGrade=nil, projectablePoints=false, projectedPoints=false, movedPoints=false, quiet=false) {
+        if (substrateGrade == nil) {
+            var substrateGrade = [2]
         }
-        for (i in 0...self.particles.points.count()) {
-            if (quiet == false) {
-                print "Plotting: ${i+1}/${self.particles.points.count()}"
-            }
-            if (projectablePoints == true) {
-                var gPt = Graphics()
-                gPt.display(Sphere(self.particles.projectablePoints[i], 0.02, color=[0,0,255]))                
-                gCombined += gPt.clone()
-            }
-            if (projectedPoints == true) {
-                var gPt = Graphics()
-                gPt.display(Sphere(self.particles.projectedPoints[i].particleinfo[0], 0.02, color=[255,0,0]))                
-                gCombined += gPt.clone()
-            }
-            if (movedPoints == true) {
-                var gPt = Graphics()
-                gPt.display(Sphere(self.particles.points[i].particleinfo[0], 0.02, color=[0,255,0]))                
-                gCombined += gPt.clone()
-            }
+        var gMesh = plotmesh(SubstrateObj.mesh, grade=substrateGrade)
+        var gCombined = gMesh
+        if (projectablePoints == true) {
+            var gProjectable = plotmesh(ParticlesObj.projectablePoints, grade=[0], color=[255,0,0])              
+            gCombined += gProjectable.clone()
+        }
+        if (projectedPoints == true) {
+            var gProjected = plotmesh(ParticlesObj.projectedPoints, grade=[0], color=[0,0,255])              
+            gCombined += gProjected.clone()
+        }
+        if (movedPoints == true) {
+            var gMoved = plotmesh(ParticlesObj.movedPoints, grade=[0], color=[0,255,0])              
+            gCombined += gMoved.clone()
         }
         Show(gCombined)
     }
@@ -1409,11 +1387,11 @@ class Force{
     init(func) {
         self.func = func
     }
-    getForceMatrix(particles) {
-        var n = particles.count()
+    getForceMatrix(particleLocs) {
+        var n = particleLocs.dimensions()[1]
         var out = Matrix(3, n)
         for (i in 0...n) {
-            out.setcolumn(i, self.totalForce(particles, i))
+            out.setcolumn(i, self.totalForce(particleLocs, i))
         }
         return out
     }
@@ -1423,13 +1401,13 @@ class PairwiseForce is Force{
     force(x, y) {
         return self.func(x, y)
     }
-    totalForce(particles, index) {
+    totalForce(particleLocs, index) {
         var out = Matrix([0,0,0])
-        var n = particles.count()
-        var x = particles[index]
+        var n = particleLocs.dimensions()[1]
+        var x = particleLocs.column(index)
         for (i in 0...n) {
             if (i != index) {
-                var y = particles[i]
+                var y = particleLocs.column(i)
                 out += self.force(x, y)
             }
         }
@@ -1441,8 +1419,8 @@ class SinglePositionForce is Force{
     force(x) {
         return self.func(x)
     }
-    totalForce(particles, index) {
-        return self.force(particles[index])
+    totalForce(particleLocs, index) {
+        return self.force(particleLocs.column(index))
     }
 }
 
@@ -1457,7 +1435,7 @@ class ConstantForce is Force{
     force(x) {
         return self.func(self.vector)
     }
-    totalForce(particles, index) {
+    totalForce(particleLocs, index) {
         return self.force(self.vector)
     }
 }
@@ -1494,14 +1472,14 @@ class YZSwirl is SinglePositionForce {
 }
 
 class ParticlesForceMatrix {
-    init(particles, forceFunctional) {
+    init(particleLocs, forceFunctional) {
         self.matrix = self.getMatrix()
     }
-    getMatrix(particles, forceFunctional) {
-        var n = particles.count()
+    getMatrix(particleLocs, forceFunctional) {
+        var n = particleLocs.dimensions()[1]
         var out = Matrix(3, n)
         for (i in 0...n) {
-            out.setcolumn(i, forceFunctional.totalForce(particles, i))
+            out.setcolumn(i, forceFunctional.totalForce(particleLocs, i))
         }
         return out
     }
