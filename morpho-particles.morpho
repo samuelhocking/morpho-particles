@@ -1,0 +1,1486 @@
+// Script to project arbitary points in R^3 onto mesh surface, and moved them on the surface
+// By: Sam Hocking
+
+import meshtools
+import plot
+import optimize
+import kdtree
+import constants
+import implicitmesh
+import "DictlikeSetOps.morpho"
+import "LinAlgTools.morpho"
+
+// get rotated list (same cyclic order, but different starting point) given delta (number of spots to advance in original list cycle)
+fn rotateList(list, delta) {return [list[mod(0+delta,3)], list[mod(1+delta,3)], list[mod(2+delta,3)]]}
+
+// get rotated sorting indices ([0,1,2]) given delta 
+fn rotateIndices(delta, adjust=true) {
+    var arr = [mod(0+delta,3), mod(1+delta,3), mod(2+delta, 3)]
+    if (adjust==false) {
+        return arr
+    } else {
+        var x = [0,1,2]
+        return x[arr]
+    }
+}
+
+fn distSqXY(x, y) {
+    var d = x-y
+    return d.inner(d)
+}
+
+fn distXY(x, y) {
+    var d = x-y
+    return sqrt(distSqXY(x, y))
+}
+
+fn unitXY(x, y) {
+    var dir = x - y
+    if (dir.norm() > 0) {
+        return dir/dir.norm()
+    } else {
+        return dir
+    }
+}
+
+//timer class (for testing)
+class timerClass {
+    init() {
+        self.startTime = 0
+        self.clockTimeArr = []
+    }
+    timerStart() {
+        self.startTime = clock()
+    }
+    timerStop() {
+        self.clockTimeArr.append(clock()-self.startTime)
+        self.startTime=0
+    }
+}
+
+//connectivity class to store connectivity block matrices for a mesh
+class MeshConnectivity {
+    init (mesh) {
+        self.mesh = mesh
+        self.ve = mesh.connectivitymatrix(0,1)
+        self.vf = mesh.connectivitymatrix(0,2)
+        self.ef = mesh.connectivitymatrix(1,2)
+    }
+}
+
+//enhanced Vertex class, primarily to store neighbors (which are static except with refinement/regularization)
+class Vertex {
+    init (conn, index) {
+        self.mesh = conn.mesh
+        self.conn = conn
+        self.index = index
+        self.neighbors = self.getNeighbors()
+    }
+    //return neighbor vertex indices (order is not spatially informative, likely just ascending from connectivity matrix)
+    getNeighbors() {
+        var incidentEdges = self.conn.ve.transpose().rowindices(self.index)
+        var neighbors = []
+        for (x in incidentEdges) {
+            var verts = self.conn.ve.rowindices(x).clone()
+            verts.remove(self.index)
+            neighbors.append(verts[0])
+        }
+        return neighbors
+    }
+}
+
+//helper class to store list of Vertex objects for each vertex in the mesh
+class VertexHelper {
+    init (conn) {
+        self.mesh = conn.mesh
+        self.conn = conn
+        self.numVerts = self.mesh.count(0)
+        self.vertexArray = self.getVertexArray()
+    }
+    getVertexArray() {
+        var vertexArray = []
+        for (i in 0...self.numVerts) {
+            vertexArray.append(Vertex(self.conn, i))
+        }
+        return vertexArray
+    }
+}
+
+//kd-tree helper class
+//wraps native KDTree object and helps add and retrieve vertex ids (native only returns location of nearest node)
+class KDHelper {
+    init (mesh) {
+        self.mesh = mesh
+        self.numVerts = mesh.count(0)
+        self.pts = self.getPts()
+        self.tree = KDTree(self.pts)
+        self.addNodeIDs()
+    }
+    //get list of mesh vertex coordinates
+    getPts() {
+        var pts = []
+        for (i in 0...self.numVerts) {
+            pts.append(self.mesh.vertexposition(i))
+        }
+        return pts
+    }
+    //annotate each node object with the corresponding vertex id
+    addNodeIDs() {
+        var node
+        for (i in 0...self.numVerts) {
+            node = self.tree.nearest(self.mesh.vertexposition(i))
+            node.id = i
+        }        
+    }
+    //given x point, return closest vertex location
+    getClosestLoc(x) {
+        return self.tree.nearest(x).location
+    }
+    //given x point, return closest vertex id
+    getClosestID(x) {
+        return self.tree.nearest(x).id
+    }
+}
+
+// helper class to assist efficiently retriving face ID from corner vertex indices
+// uses KD-tree of sorted corner indices as spatial coordinates, with annotated face IDs
+class FaceKDHelper {
+    init (conn) {
+        self.conn = conn
+        self.mesh = self.conn.mesh
+        self.numFaces = self.mesh.count(2)
+        self.pts = self.getPts()
+        self.tree = KDTree(self.pts)
+        self.addNodeIDs()
+    }
+    //get list of face corner indices from connectivity matrix (naturally sorted)
+    getPts () {
+        var pts = []
+        for (i in 0...self.numFaces) {
+            pts.append(Matrix(self.conn.vf.rowindices(i)))
+        }
+        return pts
+    }
+    //annotate each node object with the corresponding face id
+    addNodeIDs() {
+        var node
+        for (i in 0...self.numFaces) {
+            node = self.tree.nearest(Matrix(self.conn.vf.rowindices(i)))
+            node.id = i
+        }
+    }
+}
+
+// helper class to assist efficiently retriving edge ID from adjacent vertex indices
+// uses KD-tree of sorted adjacent vertex indices as spatial coordinates, with annotated edge IDs
+class EdgeKDHelper {
+    init (conn) {
+        self.conn = conn
+        self.mesh = self.conn.mesh
+        self.numEdges = self.mesh.count(1)
+        self.pts = self.getPts()
+        self.tree = KDTree(self.pts)
+        self.addNodeIDs()
+    }
+    //get list of edge vertex indices from connectivity matrix (naturally sorted)
+    getPts () {
+        var pts = []
+        for (i in 0...self.numEdges) {
+            pts.append(Matrix(self.conn.ve.rowindices(i)))
+        }
+        return pts
+    }
+    //annotate each node object with the corresponding edge id
+    addNodeIDs() {
+        var node
+        for (i in 0...self.numEdges) {
+            node = self.tree.nearest(Matrix(self.conn.ve.rowindices(i)))
+            node.id = i
+        }
+    }
+}
+
+// face object designed to be used in particle movement, not naturally oriented in stars
+class Face{
+    init (faceKDObj, edgeKDObj, id) {
+        self.faceKDObj = faceKDObj
+        self.edgeKDObj = edgeKDObj
+        self.mesh = self.faceKDObj.mesh
+        self.conn = self.faceKDObj.conn
+        self.id = id
+        self.vertexIDs = self.getVertexIDs()
+        self.vertexLocs = self.getVertexLocs()
+        self.vertexIDtoIndexDict = self.getVertexIDtoIndexDict()
+        self.edgeVertexIDs = self.getEdgeVertexIDs()
+        self.edgeVertexLocs = self.getEdgeVertexLocs()
+        self.edgeIDs = self.getEdgeIDs()
+        self.edgeIDtoIndexDict = self.getEdgeIDtoIndexDict()
+        self.edgeVectors = self.getEdgeVectors()
+        self.edgeUnitVectors = self.getEdgeUnitVectors()
+        self.planeUnitNormal = self.getPlaneUnitNormal()
+        self.inwardEdgeUnitNormals = self.getInwardEdgeUnitNormals()
+        self.vertexAdjEdgeIndices = self.getVertexAdjEdgeIndices()
+        self.vertexAdjEdgeVectors = self.getVertexAdjEdgeVectors()
+        self.vertexOppEdgeIndices = self.getVertexOppEdgeIndices()
+        self.vertexAdjEdgeVertIndices = self.getVertexAdjEdgeVertIndices()
+    }
+
+    getVertexIDs() {
+        return self.conn.vf.rowindices(self.id)
+    }
+
+    getVertexLocs() {
+        var vertexLocsArr = []
+        for (idx in self.vertexIDs) {
+            vertexLocsArr.append(self.mesh.vertexposition(idx))
+        }
+        return vertexLocsArr
+    } 
+
+    getVertexIDtoIndexDict() {
+        var v0 = self.vertexIDs[0]
+        var v1 = self.vertexIDs[1]
+        var v2 = self.vertexIDs[2]
+        var dict = {v0 : 0 , v1 : 1 , v2 : 2}
+        return dict
+    }
+
+    getEdgeVertexIDs() {
+        return [
+            [self.vertexIDs[0], self.vertexIDs[1]],
+            [self.vertexIDs[1], self.vertexIDs[2]],
+            [self.vertexIDs[2], self.vertexIDs[0]]
+        ]
+    }
+
+    getEdgeVertexLocs() {
+        return [
+            [self.vertexLocs[0], self.vertexLocs[1]],
+            [self.vertexLocs[1], self.vertexLocs[2]],
+            [self.vertexLocs[2], self.vertexLocs[0]]
+        ]
+    }
+
+    getEdgeIDs() {
+        var pair0 = self.edgeVertexIDs[0].clone()
+        var pair1 = self.edgeVertexIDs[1].clone()
+        var pair2 = self.edgeVertexIDs[2].clone()
+        pair0.sort()
+        pair1.sort()
+        pair2.sort()
+        return [
+            self.edgeKDObj.tree.nearest(Matrix(pair0)).id,
+            self.edgeKDObj.tree.nearest(Matrix(pair1)).id,
+            self.edgeKDObj.tree.nearest(Matrix(pair2)).id
+        ]
+    }
+
+    getEdgeIDtoIndexDict() {
+        var e0 = self.edgeIDs[0]
+        var e1 = self.edgeIDs[1]
+        var e2 = self.edgeIDs[2]
+        var dict = {e0 : 0 , e1 : 1 , e2 : 2}
+        return dict
+    }
+
+    getEdgeVectors() {
+        return [
+            self.vertexLocs[1] - self.vertexLocs[0],
+            self.vertexLocs[2] - self.vertexLocs[1],
+            self.vertexLocs[0] - self.vertexLocs[2]
+        ]
+    }
+
+    getEdgeUnitVectors() {
+        var units = []
+        for (vect in self.edgeVectors) {
+            units.append(vect/vect.norm())
+        }
+        return units
+    }
+
+    getPlaneUnitNormal() {
+        var normal = cross(self.edgeVectors[0], self.edgeVectors[1])
+        return normal/normal.norm()
+    }
+
+    getInwardEdgeUnitNormals() {
+        return [
+            a_remove_b(a=self.edgeUnitVectors[1], b=self.edgeUnitVectors[0], normalize=true),
+            a_remove_b(a=self.edgeUnitVectors[2], b=self.edgeUnitVectors[1], normalize=true),
+            a_remove_b(a=self.edgeUnitVectors[0], b=self.edgeUnitVectors[2], normalize=true)
+        ]
+    }
+
+    getVertexAdjEdgeIndices() {
+        return [
+            [2,0],
+            [0,1],
+            [1,2]
+        ]
+    }
+
+    getVertexAdjEdgeVertIndices() {
+        return [
+            [2,1],
+            [0,2],
+            [1,0]
+        ]
+    }
+
+    getVertexAdjEdgeVectors() {
+        return [
+            [-self.edgeVectors[2],self.edgeVectors[0]],
+            [-self.edgeVectors[0],self.edgeVectors[1]],
+            [-self.edgeVectors[1],self.edgeVectors[2]]
+        ]
+    }
+
+    getVertexOppEdgeIndices() {
+        return [1,2,0]
+    }
+}
+
+// helper class that generates an array of Face objects for the mesh, indexed by face ID
+class FaceHelper{
+    init (faceKDObj, edgeKDObj) {
+        self.faceKDObj = faceKDObj
+        self.edgeKDObj = edgeKDObj
+        self.mesh = self.faceKDObj.mesh
+        self.conn = self.faceKDObj.conn
+        self.faceArr = self.getFaceArr()   
+    }
+
+    getFaceArr() {
+        var faceArr = []
+        for (idx in 0...self.mesh.count(2)) {
+            faceArr.append(Face(self.faceKDObj, self.edgeKDObj, idx))
+        }
+        return faceArr
+    }
+}
+
+// wrapper for a Face to accomodate a particular orientation within a Star
+class StarFace{
+    init (faceHelperObj, vertexIDs) {
+        // inter-object references
+        self.faceHelper = faceHelperObj
+        self.faceKDObj = self.faceHelper.faceKDObj
+        self.edgeKDObj = self.faceHelper.edgeKDObj
+        self.mesh = self.faceKDObj.mesh
+        self.conn = self.faceKDObj.conn
+        // basic arguments from star
+        self.centerID = vertexIDs[0]
+        self.sortedReqVertexIDs = vertexIDs.clone()
+        self.sortedReqVertexIDs.sort()
+        // get faceID of the face and find un-manipulated face
+        self.id = self.faceKDObj.tree.nearest(Matrix(self.sortedReqVertexIDs)).id
+        self.rawFace = self.faceHelper.faceArr[self.id]
+
+        // find rotation delta and rotate face elements accordingly
+        self.rotationDelta = self.rawFace.vertexIDtoIndexDict[self.centerID]
+        if (self.rotationDelta != 0) {
+            var rotationIndices = rotateIndices(self.rotationDelta, adjust=true)
+            self.vertexIDs = self.rawFace.vertexIDs[rotationIndices]
+            self.vertexLocs = self.rawFace.vertexLocs[rotationIndices]
+            self.edgeVertexIDs = self.rawFace.edgeVertexIDs[rotationIndices]
+            self.edgeVertexLocs = self.rawFace.edgeVertexLocs[rotationIndices]
+            self.edgeIDs = self.rawFace.edgeIDs[rotationIndices]
+            self.edgeVectors = self.rawFace.edgeVectors[rotationIndices]
+            self.edgeUnitVectors = self.rawFace.edgeUnitVectors[rotationIndices]
+            self.inwardEdgeUnitNormals = self.rawFace.inwardEdgeUnitNormals[rotationIndices]
+            self.vertexAdjEdgeVectors = self.rawFace.vertexAdjEdgeVectors[rotationIndices]
+        } else {
+            self.vertexIDs = self.rawFace.vertexIDs
+            self.vertexLocs = self.rawFace.vertexLocs
+            self.edgeVertexIDs = self.rawFace.edgeVertexIDs
+            self.edgeVertexLocs = self.rawFace.edgeVertexLocs
+            self.edgeIDs = self.rawFace.edgeIDs
+            self.edgeVectors = self.rawFace.edgeVectors
+            self.edgeUnitVectors = self.rawFace.edgeUnitVectors
+            self.inwardEdgeUnitNormals = self.rawFace.inwardEdgeUnitNormals
+            self.vertexAdjEdgeVectors = self.rawFace.vertexAdjEdgeVectors            
+        }
+
+        // figure out if non-center vertices need to be flipped
+        if (self.vertexIDs[1] != vertexIDs[1]) {
+            self.flipFlag = true
+            var cornerFlipIndices = [0,2,1]
+            var fullFlipIndices = [2,1,0]
+            self.vertexIDs = self.vertexIDs[cornerFlipIndices]
+            self.vertexLocs = self.vertexLocs[cornerFlipIndices]
+            self.edgeVertexIDs = [
+                [self.vertexIDs[0], self.vertexIDs[1]],
+                [self.vertexIDs[1], self.vertexIDs[2]],
+                [self.vertexIDs[2], self.vertexIDs[0]]
+            ]
+            self.edgeVertexLocs = [
+                [self.vertexLocs[0], self.vertexLocs[1]],
+                [self.vertexLocs[1], self.vertexLocs[2]],
+                [self.vertexLocs[2], self.vertexLocs[0]]
+            ]
+            self.edgeIDs = self.edgeIDs[fullFlipIndices]
+            self.edgeVectors = [
+                -self.edgeVectors[2],
+                -self.edgeVectors[1],
+                -self.edgeVectors[0]
+            ]
+            self.inwardEdgeUnitNormals = self.inwardEdgeUnitNormals[fullFlipIndices]
+            self.vertexAdjEdgeVectors = [
+                [-self.edgeVectors[2],self.edgeVectors[0]],
+                [-self.edgeVectors[0],self.edgeVectors[1]],
+                [-self.edgeVectors[1],self.edgeVectors[2]]
+            ]
+        } else {
+            // do nothing
+            self.flipFlag = false
+        }
+        self.vertexIDtoIndexDict = {
+            self.vertexIDs[0] : 0 ,
+            self.vertexIDs[1] : 1 ,
+            self.vertexIDs[2] : 2
+        }
+        self.edgeIDtoIndexDict = {
+            self.edgeIDs[0] : 0 ,
+            self.edgeIDs[1] : 1 ,
+            self.edgeIDs[2] : 2
+        }
+        self.planeUnitNormal = self.getPlaneUnitNormal()
+        self.vertexAdjEdgeIndices = [
+            [2,0],
+            [0,1],
+            [1,2]
+        ]
+        self.vertexOppEdgeIndices = [
+            [2,1],
+            [0,2],
+            [1,0]
+        ]
+        self.vertexAdjEdgeVertIndices = [1,2,0]
+    }
+
+    getPlaneUnitNormal() {
+        var normal = cross(self.edgeVectors[0], -self.edgeVectors[2])
+        return normal/normal.norm()
+    }
+}
+
+//Star object that contains information on adjacent satellite vertices, faces, and face region vectors
+class Star {
+    init (vertexHelperObj, faceHelperObj, centerIndex) {
+        self.vertexHelperObj = vertexHelperObj
+        self.faceHelperObj = faceHelperObj
+        self.faceKDObj = self.faceHelperObj.faceKDObj
+        self.edgeKDObj = self.faceHelperObj.edgeKDObj
+        self.mesh = self.vertexHelperObj.mesh
+        self.conn = self.vertexHelperObj.conn
+        self.centerIndex = centerIndex
+        self.centerObj = self.vertexHelperObj.vertexArray[self.centerIndex]
+        self.centerLoc = self.mesh.vertexposition(self.centerIndex)
+        self.satellites = self.centerObj.neighbors
+        self.numSatellites = self.satellites.count()
+        self.checkCyclity()
+        self.orderedSatellites = self.getOrderedSatellites()
+        self.faceArray = self.getFaceArray()
+        self.numFaces = self.faceArray.count()
+        self.faceRegionBoundaries = self.getFaceRegionBoundaries()
+        self.faceRegionPlaneNormals = self.getFaceRegionPlaneNormals()
+    }
+    //check whether star is cyclic (all satellites have two neighbor vertices in the star) or not
+    //informs methods for star construction and calculation of regional boundary plane normals
+    checkCyclity() {
+        self.neighbCountArr = []
+        var xSatIdx, xSat, xSatNeighbors, satNeighbors, sortedCount
+        for (x in self.satellites) {
+            xSat = self.vertexHelperObj.vertexArray[x]
+            xSatNeighbors = xSat.neighbors
+            satNeighbors = dictlikeIntersection(xSatNeighbors, self.satellites)
+            self.neighbCountArr.append(satNeighbors.count())
+        }
+        var sortKey = self.neighbCountArr.order()
+        self.sortedSats = self.satellites[sortKey]
+        self.sortedNeighbCountArr = self.neighbCountArr[sortKey]
+        if (self.sortedNeighbCountArr[0] != 2) {
+            self.cyclic = false
+        } else {
+            self.cyclic = true
+        }
+    }
+    //re-order satellite vertices so the ordered list proceeds in a single consistent direction around the star's perimeter
+    getOrderedSatellites() {
+        var stack = self.sortedSats.clone()
+        var orderedSatellites = []
+        var x, xVertex, xNeighbs, sharedNeighbors
+        var i = 0
+        while (stack.count() > 0) {
+            if (i==0) {
+                x = stack[0]
+            } else {
+                x = sharedNeighbors[0]
+            }
+            orderedSatellites.append(x)
+            stack.remove(x)
+            xVertex = self.vertexHelperObj.vertexArray[x]
+            xNeighbs = xVertex.neighbors
+            sharedNeighbors = dictlikeIntersection(stack, xNeighbs)
+            i += 1
+        }
+        return orderedSatellites
+    }
+    //get list of Face objects proceeding sequentially through ordered satellite list as the corner vertices
+    getFaceArray() {
+        var faces = []
+        var face
+        if (self.cyclic == true) {
+            for (i in 0...self.numSatellites) {
+                if (i < self.numSatellites-1) {
+                    face = StarFace(self.faceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[i+1]])
+                } else {
+                    face = StarFace(self.faceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[0]])
+                }
+                faces.append(face)
+            }
+        } else {
+            for (i in 0...self.numSatellites-1) {
+                face = StarFace(self.faceHelperObj, [self.centerIndex, self.orderedSatellites[i], self.orderedSatellites[i+1]])
+                faces.append(face)
+            }
+        }
+        return faces
+    }
+    //get vectors that define the boundaries between the face regions
+    //the regions determine the closest face
+    //the vectors themselves are the average of adjacent face surface normals and are tangent to the separating plane
+    getFaceRegionBoundaries() {
+        var boundArr
+        var faceRegionBoundaries = []
+        if (self.numFaces == 1) {
+            faceRegionBoundaries.append([nil,nil])
+            return faceRegionBoundaries
+        } else {
+            for (i in 0...self.numFaces) {
+                if (i == 0) {
+                    boundArr = [
+                        0.5 * (self.faceArray[-1].planeUnitNormal + self.faceArray[0].planeUnitNormal),
+                        0.5 * (self.faceArray[0].planeUnitNormal + self.faceArray[1].planeUnitNormal)
+                    ]
+                } else if (i < self.numFaces-1) {
+                    boundArr = [
+                        0.5 * (self.faceArray[i-1].planeUnitNormal + self.faceArray[i].planeUnitNormal),
+                        0.5 * (self.faceArray[i].planeUnitNormal + self.faceArray[i+1].planeUnitNormal)
+                    ]                
+                } else {
+                    boundArr = [
+                        0.5 * (self.faceArray[i-1].planeUnitNormal + self.faceArray[i].planeUnitNormal),
+                        0.5 * (self.faceArray[i].planeUnitNormal + self.faceArray[0].planeUnitNormal)
+                    ]  
+                }
+                faceRegionBoundaries.append(boundArr)
+            }
+            return faceRegionBoundaries
+        }
+    }
+    //compute normal vectors for each face's two region boundary planes
+    //vertex ordering ensures that these point inward
+    getFaceRegionPlaneNormals() {
+        var Arr
+        var faceRegionPlaneNormals = []
+        var v1, v2
+        if (self.cyclic == true) {
+            for (i in 0...self.numFaces) {
+                v1 = cross(self.faceRegionBoundaries[i][0], self.faceArray[i].edgeVectors[0])
+                v2 = cross(-self.faceArray[i].edgeVectors[2], self.faceRegionBoundaries[i][1])
+                Arr = [
+                    v1/v1.norm(),
+                    v2/v2.norm()
+                ]
+                faceRegionPlaneNormals.append(Arr)
+            }
+        } else {
+            if (self.numFaces == 1) {
+                faceRegionPlaneNormals.append([nil, nil])
+            } else {
+                self.syntheticAcyclicEdge = -0.5 * (self.faceArray[0].inwardEdgeUnitNormals[0] + self.faceArray[-1].inwardEdgeUnitNormals[2])
+                for (i in 0...self.numFaces) {
+                    if (i==0) {
+                        v1 = cross(self.faceRegionBoundaries[i][0], self.syntheticAcyclicEdge)
+                        v2 = cross(-self.faceArray[i].edgeVectors[2], self.faceRegionBoundaries[i][1])
+                    } else if (i < self.numFaces-1) {
+                        v1 = cross(self.faceRegionBoundaries[i][0], self.faceArray[i].edgeVectors[0])
+                        v2 = cross(-self.faceArray[i].edgeVectors[2], self.faceRegionBoundaries[i][1])
+                    } else {
+                        v1 = cross(self.faceRegionBoundaries[i][0], self.faceArray[i].edgeVectors[0])
+                        v2 = cross(self.syntheticAcyclicEdge, self.faceRegionBoundaries[i][1])
+                    }
+                    Arr = [
+                        v1/v1.norm(),
+                        v2/v2.norm()
+                    ]
+                    faceRegionPlaneNormals.append(Arr)
+                }
+            }
+        }
+        return faceRegionPlaneNormals
+    }
+}
+
+//helper class to store list of Star object for each vertex in the mesh
+class StarHelper {
+    init (vertexHelperObj, faceHelperObj) {
+        self.vertexHelperObj = vertexHelperObj
+        self.faceHelperObj = faceHelperObj
+        self.faceKDObj = self.faceHelperObj.faceKDObj
+        self.edgeKDObj = self.faceHelperObj.edgeKDObj
+        self.mesh = self.vertexHelperObj.mesh
+        self.conn = self.vertexHelperObj.conn
+        self.numVerts = self.vertexHelperObj.numVerts
+        self.starArray = self.getStarArray()
+    }
+    getStarArray() {
+        var starArray = []
+        for (i in 0...self.numVerts) {
+            starArray.append(Star(self.vertexHelperObj, self.faceHelperObj, i))
+        }
+        return starArray
+    }
+}
+
+//projector object (really just a method container)
+//given the index of the closest vertex to a point, creates Star and contains methods to return closest face and closest mesh point
+class StarProjector{
+    init (starHelperObj) {
+        self.starHelperObj = starHelperObj
+    }
+
+    getClosestFace(x=nil, centerIndex=nil, threshold=1e-8) {
+        var star = self.starHelperObj.starArray[centerIndex]
+        var vx = x - star.centerLoc
+        var yr_arr = []
+        var prod_yr_arr = []
+        var abs_prod_yr_arr = []
+        var faceObj
+        var yr1, yr2
+        var returnArr
+        if (star.numFaces == 1) {
+            faceObj = star.faceArray[0]
+        } else {
+            for (i in 0...star.numFaces) {
+                yr1 = classifyInner(a=vx, b=star.faceRegionPlaneNormals[i][0], threshold=threshold)
+                yr2 = classifyInner(a=vx, b=star.faceRegionPlaneNormals[i][1], threshold=threshold)
+                yr_arr.append([yr1, yr2])
+                prod_yr_arr.append(yr1*yr2)
+                abs_prod_yr_arr.append(abs(yr1*yr2))
+            }
+            if (abs(Matrix(abs_prod_yr_arr).sum()) == 0) {
+                faceObj = nil
+            } else for (i in 0...star.numFaces) {
+                if (yr_arr[i][0] + yr_arr[i][1] == 2) {
+                    faceObj = star.faceArray[i]
+                } else if ((prod_yr_arr[i] == 0) && yr_arr[i][0] + yr_arr[i][1] == 1) {
+                    faceObj = star.faceArray[i]
+                }
+            }
+        }
+        return faceObj
+    }
+
+    getClosestMeshPt(x=nil, centerIndex=nil, threshold=1e-8) {
+        var star = self.starHelperObj.starArray[centerIndex]
+        var closestFace = self.getClosestFace(x=x, centerIndex=centerIndex, threshold=threshold)
+        var vx = x - star.centerLoc
+        var yf1, yf2, ype1, ype2, ye1, ye2, vx_sn_proj, vx_fin_proj, x_fin_proj, elemGrade, elemID
+        if (closestFace != nil) {
+            var cfsn = closestFace.planeUnitNormal
+            var vx_sn_proj = a_remove_b(a=vx, b=cfsn)
+            ye1 = classifyInner(a=vx_sn_proj, b=closestFace.edgeVectors[0], threshold=threshold)
+            yf1 = classifyInner(a=vx_sn_proj, b=closestFace.inwardEdgeUnitNormals[0], threshold=threshold)
+            ye2 = classifyInner(a=vx_sn_proj, b=-closestFace.edgeVectors[2], threshold=threshold)
+            yf2 = classifyInner(a=vx_sn_proj, b=closestFace.inwardEdgeUnitNormals[2], threshold=threshold)
+            if (yf1 + yf2 == 2) {
+                var x_sn_proj = star.centerLoc + vx_sn_proj
+                var v_x_sn_proj_c0 = x_sn_proj - closestFace.vertexLocs[1]
+                var yf3 = classifyInner(a=v_x_sn_proj_c0, b=closestFace.inwardEdgeUnitNormals[1], threshold=threshold)
+                if (yf3 == 1) {
+                    vx_fin_proj = vx_sn_proj
+                    elemGrade = 2
+                    elemID = closestFace.id
+                } else if (yf3 == 0) {
+                    vx_fin_proj = vx_sn_proj
+                    elemGrade = 1
+                    elemID = closestFace.edgeIDs[1]
+                } else {
+                    var bottom_adjustment = a_proj_b(a=v_x_sn_proj_c0, b=closestFace.inwardEdgeUnitNormals[1])
+                    vx_fin_proj = vx_sn_proj - bottom_adjustment
+                    elemGrade = 1
+                    elemID = closestFace.edgeIDs[1]
+                }
+            } else if ((ye1 == 1) && (yf1 == 0)) { // vx_proj is strictly in edge 0 (where the edge actually exists with the face)
+                vx_fin_proj = vx_sn_proj
+                elemGrade = 1
+                elemID = closestFace.edgeIDs[0]
+            } else if ((ye2 == 1) && (yf2 == 0)) { // vx_proj is strictly in edge 1 (where the edge actually exists with the face)
+                vx_fin_proj = vx_sn_proj
+                elemGrade = 1
+                elemID = closestFace.edgeIDs[2]
+            } else if ((ye1 == 1) && (yf1 == -1)) { // vx_proj is outside face, must be projected back to edge 0
+                vx_fin_proj = a_remove_b(a=vx_sn_proj, b=closestFace.inwardEdgeUnitNormals[0])
+                elemGrade = 1
+                elemID = closestFace.edgeIDs[0]
+            } else if ((ye2 == 1) && (yf2 == -1)) { // vx_proj is outside face, must be projected back to edge 1
+                vx_fin_proj = a_remove_b(a=vx_sn_proj, b=closestFace.inwardEdgeUnitNormals[2])
+                elemGrade = 1
+                elemID = closestFace.edgeIDs[2]            
+            } else { // vx_proj is in region closest to star's center vertex
+                vx_fin_proj = Matrix([0,0,0])
+                elemGrade = 0
+                elemID = centerIndex
+            }
+            x_fin_proj = star.centerLoc + vx_fin_proj
+        } else {
+            x_fin_proj = star.centerLoc
+            elemGrade = 0
+            elemID = centerIndex
+        }
+        var result = Object()
+        result.loc = x_fin_proj
+        result.elemGrade = elemGrade
+        result.elemID = elemID
+        return result
+    }
+}
+
+class ParticleMover{
+    init (faceHelper, starProjectorObj) {
+        self.faceHelper = faceHelper
+        self.faceKDObj = faceHelper.faceKDObj
+        self.edgeKDObj = faceHelper.edgeKDObj
+        self.starProjectorObj = starProjectorObj
+        self.mesh = faceHelper.mesh
+        self.conn = faceHelper.conn
+    }
+
+    getAdjFaces(particleLoc, particleElemGrade, particleElemID) {
+        var faceIndices
+        var adjFaceArr = []
+        if (particleElemGrade == 2) {
+            adjFaceArr.append(self.faceHelper.faceArr[particleElemID])
+        } else {        
+            if (particleElemGrade == 1) {
+                faceIndices = self.conn.ef.transpose().rowindices(particleElemID)
+            } else {
+                faceIndices = self.conn.vf.transpose().rowindices(particleElemID)
+            }
+            for (idx in faceIndices) {
+                adjFaceArr.append(self.faceHelper.faceArr[idx])
+            }            
+        }
+        return adjFaceArr
+    }
+
+    getClosestFace (particleLoc, particleElemGrade, particleElemID, dir, len) {
+        var x = particleLoc + len/dir.norm() * dir
+        var vx = len/dir.norm() * dir
+        if (particleElemGrade == 2) {
+            return self.faceHelper.faceArr[particleElemID]
+        } else if (particleElemGrade == 1) {
+            var faceObjs = self.getAdjFaces(particleLoc, particleElemGrade, particleElemID)
+            if (faceObjs.count() == 1) {
+                var sharedEdgeID = particleElemID
+                var f0 = faceObjs[0]
+                var sharedEdgeIndex = f0.edgeIDtoIndexDict[sharedEdgeID]
+                var vxProj = a_remove_b(a=vx, b=f0.planeUnitNormal)
+                var yf0 = classifyInner(a=vxProj, b=f0.inwardEdgeUnitNormals[sharedEdgeIndex])
+                if (yf0 == 1) {
+                    return f0
+                } else {
+                    return nil
+                }
+            } else {
+                var sharedEdgeID = particleElemID
+                var f0 = faceObjs[0]
+                var f1 = faceObjs[1]
+                var sharedEdgeIndexArr = [
+                    f0.edgeIDtoIndexDict[sharedEdgeID],
+                    f1.edgeIDtoIndexDict[sharedEdgeID]
+                ]
+                var faceNormals = [
+                    f0.planeUnitNormal,
+                    f1.planeUnitNormal
+                ]
+                var inwardSharedEdgeNormals = [
+                    f0.inwardEdgeUnitNormals[sharedEdgeIndexArr[0]],
+                    f1.inwardEdgeUnitNormals[sharedEdgeIndexArr[1]]
+                ]
+                var vxProjArr = [
+                    a_remove_b(a=vx, b=faceNormals[0]),
+                    a_remove_b(a=vx, b=faceNormals[1])
+                ]
+                var yf0 = classifyInner(a=vxProjArr[0], b=inwardSharedEdgeNormals[0])
+                var yf1 = classifyInner(a=vxProjArr[1], b=inwardSharedEdgeNormals[1])
+                if (yf0 == 1) {
+                    return f0
+                } else if (yf1 == 1) {
+                    return f1
+                } else {
+                    return nil
+                }
+            }
+        } else {
+            var cf = self.starProjectorObj.getClosestFace(x=x, centerIndex=particleElemID)
+            if (cf != nil) {
+                return self.faceHelper.faceArr[cf.id]
+            } else {
+                return nil
+            }
+        }
+    }
+
+    getEdgeClassificationUnitVectors(particleLoc, closestFace) {
+        var v_x_corners = [
+            (closestFace.vertexLocs[0] - particleLoc)/(closestFace.vertexLocs[0] - particleLoc).norm(),
+            (closestFace.vertexLocs[1] - particleLoc)/(closestFace.vertexLocs[0] - particleLoc).norm(),
+            (closestFace.vertexLocs[2] - particleLoc)/(closestFace.vertexLocs[0] - particleLoc).norm()
+        ]    
+        var v_x_mids = [
+            1/2*(closestFace.vertexLocs[0] + closestFace.vertexLocs[1]) - particleLoc,
+            1/2*(closestFace.vertexLocs[1] + closestFace.vertexLocs[2]) - particleLoc,
+            1/2*(closestFace.vertexLocs[2] + closestFace.vertexLocs[0]) - particleLoc
+        ]
+        var classificationVectors = [
+            cross(v_x_corners[0], closestFace.planeUnitNormal),
+            cross(v_x_corners[1], closestFace.planeUnitNormal),
+            cross(v_x_corners[2], closestFace.planeUnitNormal)
+        ]
+        for (i in 0...3) {
+            v_x_mids[i] = v_x_mids[i]/v_x_mids[i].norm()
+            classificationVectors[i] = classificationVectors[i]/classificationVectors[i].norm()
+        }
+        var edgeClassificationVectors = [
+            [classificationVectors[0]*hardClassifyInner(a=classificationVectors[0], b=v_x_mids[0]), classificationVectors[1]*hardClassifyInner(a=classificationVectors[1], b=v_x_mids[0])],
+            [classificationVectors[1]*hardClassifyInner(a=classificationVectors[1], b=v_x_mids[1]), classificationVectors[2]*hardClassifyInner(a=classificationVectors[2], b=v_x_mids[1])],
+            [classificationVectors[2]*hardClassifyInner(a=classificationVectors[2], b=v_x_mids[2]), classificationVectors[0]*hardClassifyInner(a=classificationVectors[0], b=v_x_mids[2])]
+        ]
+        return edgeClassificationVectors
+    }
+
+    moveNowhere(particleLoc, particleElemGrade, particleElemID, dir) {
+        var result = Object()
+        result.loc = particleLoc
+        result.elemGrade = particleElemGrade
+        result.elemID = particleElemID
+        result.vectDir = dir
+        result.vectLen = 0
+        return result
+    }
+
+    moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, pathElemGrade, pathElemID) {
+        var unit_vx_proj = vx_proj/vx_proj.norm()
+        var movementVect, endingElemGrade, endingElemID
+        var result = Object()
+        var tgtVertexLoc = self.mesh.vertexposition(tgtVertexID)
+        var allowedMovementVect = tgtVertexLoc - particleLoc
+        var allowedLen = allowedMovementVect.norm()
+        if (allowedLen > len) { // if allowed length is longer than vx_proj, particle will stay in originating element grade
+            movementVect = len*unit_vx_proj
+            endingElemGrade = pathElemGrade
+            endingElemID = pathElemID
+        } else { // otherwise, it will end at the target vertex
+            movementVect = allowedMovementVect
+            endingElemGrade = 0
+            endingElemID = tgtVertexID
+        }
+        result.loc = particleLoc + movementVect
+        result.elemGrade = endingElemGrade
+        result.elemID = endingElemID
+        result.vectDir = dir
+        result.vectLen = len - movementVect.norm()
+        return result
+    }
+
+    moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, closestFace, tgtEdgeID) {
+        var movementVect, endingElemGrade, endingElemID
+        var result = Object()
+        var unit_vx_proj = vx_proj/vx_proj.norm()
+        var tgtEdgeIdx = closestFace.edgeIDtoIndexDict[tgtEdgeID]
+        var totalEdgeLengths = closestFace.edgeVectors[0].norm() + closestFace.edgeVectors[1].norm() + closestFace.edgeVectors[2].norm()
+        var long_vx_proj = totalEdgeLengths*unit_vx_proj
+        var tgtEdgeVect = closestFace.edgeVectors[tgtEdgeIdx]
+        var tgtEdgeVertexIDs = closestFace.edgeVertexIDs[tgtEdgeIdx]
+        var tgtEdgeVertexLocs = closestFace.edgeVertexLocs[tgtEdgeIdx]
+        var v_corner_x = particleLoc - tgtEdgeVertexLocs[0]
+        var v_corner_x_proj_edge = a_proj_b(a=v_corner_x, b=tgtEdgeVect)
+        var p_e = tgtEdgeVertexLocs[0] + v_corner_x_proj_edge
+        var v_x_p_e = v_corner_x_proj_edge - v_corner_x
+        var long_v_x_proj_e_normal, scaleFactor, scaled_vx_proj
+        if (v_x_p_e.norm() <= 1e-8) {
+            long_v_x_proj_e_normal = Matrix([0,0,0])
+            scaleFactor = 0
+            scaled_vx_proj = Matrix([0,0,0])
+        } else {
+            long_v_x_proj_e_normal = a_proj_b(a=long_vx_proj, b=v_x_p_e)
+            scaleFactor = long_v_x_proj_e_normal.norm()/v_x_p_e.norm()
+            scaled_vx_proj = 1/scaleFactor * long_vx_proj
+        }
+        var allowedMovementVect = scaled_vx_proj
+        var allowedLen = allowedMovementVect.norm()
+        if (allowedLen > len) {
+            movementVect = len*unit_vx_proj
+            endingElemGrade = 2
+            endingElemID = closestFace.id
+        } else {
+            movementVect = allowedMovementVect
+            endingElemGrade = 1
+            endingElemID = tgtEdgeID
+        }
+        result.loc = particleLoc + movementVect
+        result.elemGrade = endingElemGrade
+        result.elemID = endingElemID
+        result.vectDir = dir
+        result.vectLen = len - movementVect.norm()
+        return result
+    }
+
+    movementStep(point, dir, len, quiet) {
+        var particleLoc = point.loc
+        var particleElemGrade = point.elemGrade
+        var particleElemID = point.elemID
+        var closestFace = self.getClosestFace(particleLoc, particleElemGrade, particleElemID, dir, len)
+        var unit_vx = dir/dir.norm()
+        var vx = len*unit_vx
+        var result, printTag
+        if (particleElemGrade == 2) { // SECTION 1: PARTICLE GRADE 2 (FACE)
+            var vx_proj = a_remove_b(a=vx, b=closestFace.planeUnitNormal)
+            if (vx_proj.norm() < 1e-8) { // SECTION 1A: ||VX_PROJ|| = 0
+                printTag = "1A"
+                result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
+            } else { // SECTION 1B: ||VX_PROJ|| > 0
+                var unit_vx_proj = vx_proj/vx_proj.norm()
+                var v_x_corners = [
+                    closestFace.vertexLocs[0] - particleLoc,
+                    closestFace.vertexLocs[1] - particleLoc,
+                    closestFace.vertexLocs[2] - particleLoc
+                ]
+                var classifyParallelArr = [
+                    classifyParallel(a=v_x_corners[0], b=unit_vx_proj, threshold=1e-8),
+                    classifyParallel(a=v_x_corners[1], b=unit_vx_proj, threshold=1e-8),
+                    classifyParallel(a=v_x_corners[2], b=unit_vx_proj, threshold=1e-8)
+                ]
+                var tgtVertexID
+                for (i in 0...classifyParallelArr.count()) {
+                    if (classifyParallelArr[i] == 1) {
+                        tgtVertexID = closestFace.vertexIDs[i]
+                        break
+                    }
+                }
+                if (tgtVertexID != nil) { // SECTION 1B1: VX_PROJ heading straight at a vertex
+                    printTag = "1B1"
+                    result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, particleElemGrade, particleElemID)
+                } else { // SECTION 1B2: VX_PROJ heading at an edge
+                    var edgeClassificationVectors = self.getEdgeClassificationUnitVectors(particleLoc, closestFace)
+                    var yeArr = [
+                        [
+                            classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[0][0], threshold=1e-8),
+                            classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[0][1], threshold=1e-8)
+                            ],
+                        [
+                            classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[1][0], threshold=1e-8),
+                            classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[1][1], threshold=1e-8)
+                            ],
+                        [
+                            classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[2][0], threshold=1e-8),
+                            classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[2][1], threshold=1e-8)
+                            ]
+                    ]
+                    var tgtEdgeID
+                    for (i in 0...yeArr.count()) { // SECTION 1B2a
+                        if (yeArr[i][0] + yeArr[i][1] == 2) {
+                            tgtEdgeID = closestFace.edgeIDs[i]
+                            printTag = "1B2a"
+                            break
+                        }
+                    }
+                    result = self.moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
+                }
+            }
+        } else if (particleElemGrade == 1) { // SECTION 2: PARTICLE GRADE 1 (EDGE)
+            if (closestFace == nil) { // SECTION 2A: no closest face -> particle will move on the edge
+                var edgeVertexIDs = self.conn.ve.rowindices(particleElemID)
+                var edgeVertexLocs = [
+                    self.mesh.vertexposition(edgeVertexIDs[0]),
+                    self.mesh.vertexposition(edgeVertexIDs[1])
+                ]
+                var edgeVector = edgeVertexLocs[1] - edgeVertexLocs[0]
+                var vx_proj = a_proj_b(a=vx, b=edgeVector)
+                if (vx_proj.norm() < 1e-8) { // SECTION 2A1: ||VX_PROJ|| = 0
+                    printTag = "2A1"
+                    result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
+                } else { // SECTION 2A2: ||VX_PROJ|| > 0
+                    var unit_vx_proj = vx_proj/vx_proj.norm()
+                    var tgtVertexID, tgtVertexLoc
+                    if (classifyInner(a=unit_vx_proj, b=edgeVector)>=0) {
+                        tgtVertexID = edgeVertexIDs[1]
+                    } else {
+                        tgtVertexID = edgeVertexIDs[0]
+                    }
+                    printTag = "2A2"
+                    result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, particleElemGrade, particleElemID)
+                }
+            } else { // SECTION 2B: there is a closest face, particle will not move on the edge
+                var vx_proj = a_remove_b(a=vx, b=closestFace.planeUnitNormal)
+                if (vx_proj.norm() < 1e-8) { // SECTION 2B1: ||VX_PROJ|| = 0
+                    printTag = "2B1"
+                    result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
+                } else { // SECTION 2B2: ||VX_PROJ|| > 0
+                    var unit_vx_proj = vx_proj/vx_proj.norm()
+                    var edgeIdx = closestFace.edgeIDtoIndexDict[particleElemID]
+                    var oppVertexIdx
+                    if (edgeIdx == 0) {
+                        oppVertexIdx = 2
+                    } else if (edgeIdx == 1) {
+                        oppVertexIdx = 0
+                    } else {
+                        oppVertexIdx = 1
+                    }
+                    var oppVertexID = closestFace.vertexIDs[oppVertexIdx]
+                    var oppVertexLoc = self.mesh.vertexposition(oppVertexID)
+                    var vx_oppVertex = oppVertexLoc - particleLoc
+                    if (classifyParallel(a=unit_vx_proj, b=vx_oppVertex) == 1) { // SECTION 2B2a: vx_proj is heading straight towards the vertex opposite the starting edge
+                        var tgtVertexID = oppVertexID
+                        printTag = "2B2a"
+                        result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_proj, tgtVertexID, 2, closestFace.id)
+                    } else { // SECTION 2B2b: vx_proj is heading towards one of the other two edges (not the starting edge)
+                        var edgeClassificationVectors = self.getEdgeClassificationUnitVectors(particleLoc, closestFace)
+                        var otherEdgeIndices = closestFace.vertexAdjEdgeIndices[oppVertexIdx]
+                        var otherEdgeIDs = [
+                            closestFace.edgeIDs[otherEdgeIndices[0]],
+                            closestFace.edgeIDs[otherEdgeIndices[1]]
+                        ]
+                        var yeArr = [
+                            [
+                                classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[otherEdgeIndices[0]][0]),
+                                classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[otherEdgeIndices[0]][1])
+                                ],
+                            [
+                                classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[otherEdgeIndices[1]][0]),
+                                classifyInner(a=unit_vx_proj, b=edgeClassificationVectors[otherEdgeIndices[1]][1])
+                                ]
+                        ]
+                        var tgtEdgeID
+                        if (yeArr[0][0] + yeArr[0][1] == 2) { // SECTION 2B2b1a: vx_proj goes clearly through edge 0
+                            printTag = "2B2b1a"
+                            tgtEdgeID = closestFace.edgeIDs[otherEdgeIndices[0]]
+                        } else if (yeArr[1][0] + yeArr[1][1] == 2) { // SECTION 2B2b1b: vx_proj goes clearly through edge 1
+                            printTag = "2B2b1b"
+                            tgtEdgeID = closestFace.edgeIDs[otherEdgeIndices[1]]
+                        }
+                        result = self.moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
+                    }
+                }
+            }
+        } else { // SECTION 3: PARTICLE GRADE 0 (VERTEX)
+            if (closestFace == nil) { // SECTION 3A: no closest face -> particle will stay at the vertex
+                printTag = "3A"
+                result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
+            } else { // SECTION 3B: Closest face -> particle will move off vertex          
+                var vx_proj = a_remove_b(a=vx, b=closestFace.planeUnitNormal)
+                if (vx_proj.norm() < 1e-8) { // SECTION 3B1: ||VX_PROJ|| = 0
+                    printTag = "3B1"
+                    result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
+                } else { // SECTION 3B2: ||VX_PROJ|| > 0
+                    var unit_vx_proj = vx_proj/vx_proj.norm()
+                    var vertexIndex = closestFace.vertexIDtoIndexDict[particleElemID]
+                    var edgeIndices = closestFace.vertexAdjEdgeIndices[vertexIndex]
+                    var edgeIDs = [closestFace.edgeIDs[edgeIndices[0]],closestFace.edgeIDs[edgeIndices[1]]]
+                    var edgeVectors = closestFace.vertexAdjEdgeVectors[vertexIndex]
+                    var yi0 = classifyInner(a=unit_vx_proj, b=closestFace.inwardEdgeUnitNormals[edgeIndices[0]])
+                    var ye0 = classifyInner(a=unit_vx_proj, b=edgeVectors[0])
+                    var yi1 = classifyInner(a=unit_vx_proj, b=closestFace.inwardEdgeUnitNormals[edgeIndices[1]])
+                    var ye1 = classifyInner(a=unit_vx_proj, b=edgeVectors[1])
+                    if (yi0 + yi1 == 2) { // SECTION 3B2a: vx_proj strictly inside face -> opposite edge
+                        var tgtEdgeIdx = closestFace.vertexOppEdgeIndices[vertexIndex]
+                        var tgtEdgeID = closestFace.edgeIDs[tgtEdgeIdx]
+                        printTag = "3B2a"
+                        result = self.moveTowardsEdge(particleLoc, particleElemGrade, particleElemID, dir, len, unit_vx_proj, closestFace, tgtEdgeID)
+                    } else { // SECTION 3B2a: vx_proj is on one of the edges (or outside and needs to be projected back) and going towards
+                        var tgtVertexIdx, tgtVertexID, vx_fin_proj, pathEdgeID
+                        if ((ye0 == 1) && (yi0 == 0)) { // SECTION 3B2b1: vx_proj strictly on edge 0
+                            vx_fin_proj = vx_proj
+                            printTag = "3B2b1"
+                            tgtVertexIdx = closestFace.vertexAdjEdgeVertIndices[vertexIndex][0]
+                            pathEdgeID = edgeIDs[0]
+                        } else if ((ye1 == 1) && (yi1 == 0)) { // SECTION 3B2b2: vx_proj strictly on edge 1
+                            vx_fin_proj = vx_proj
+                            printTag = "3B2b2"
+                            tgtVertexIdx = closestFace.vertexAdjEdgeVertIndices[vertexIndex][1]
+                            pathEdgeID = edgeIDs[1]
+                        } else if ((ye0 == 1) && (yi0 == -1)) { // SECTION 3B2b3: vx_proj is outside face, must be projected back to edge 0
+                            vx_fin_proj = a_remove_b(a=vx_proj, b=closestFace.inwardEdgeUnitNormals[edgeIndices[0]])
+                            printTag = "3B2b3"
+                            tgtVertexIdx = closestFace.vertexAdjEdgeVertIndices[vertexIndex][0]
+                            pathEdgeID = edgeIDs[0]
+                        } else if ((ye1 == 1) && (yi1 == -1)) { // SECTION 3B2b4: vx_proj is outside face, must be projected back to edge 1
+                            vx_fin_proj = a_remove_b(a=vx_proj, b=closestFace.inwardEdgeUnitNormals[edgeIndices[1]])
+                            printTag = "3B2b4"
+                            tgtVertexIdx = closestFace.vertexAdjEdgeVertIndices[vertexIndex][1]   
+                            pathEdgeID = edgeIDs[1]
+                            var pathEdgeIndex = closestFace.edgeIDtoIndexDict[pathEdgeID]
+                        } else { // SECTION 3B2b5: vx_proj not in the face or in the direction of one of the edges
+                            printTag = "3B2b5"
+                            tgtVertexIdx = nil
+                        }
+                        if (tgtVertexIdx != nil) {
+                            tgtVertexID = closestFace.vertexIDs[tgtVertexIdx]
+                            result = self.moveTowardsVertex(particleLoc, particleElemGrade, particleElemID, dir, len, vx_fin_proj, tgtVertexID, 1, pathEdgeID)
+                        } else {
+                            result = self.moveNowhere(particleLoc, particleElemGrade, particleElemID, dir)
+                        }
+                    }
+                }
+            } 
+        }
+        if (quiet == false) {
+            print "---------------------------------------"
+            print "result:"
+            print "logic branch: ${printTag}"
+            print "loc:          ${[result.loc[0], result.loc[1], result.loc[2]]}"
+            print "elemGrade:    ${result.elemGrade}"
+            print "elemID:       ${result.elemID}"
+            print "dir:          ${[result.vectDir[0],result.vectDir[1],result.vectDir[2]]}"
+            print "len:          ${result.vectLen}"
+            print "---------------------------------------"
+            print "\n"
+        }
+        return result
+    }
+
+    movementLoop(point, dir, len, quiet=true) {
+        var particleLoc = point.loc
+        var particleElemGrade = point.elemGrade
+        var particleElemID = point.elemID
+        if (quiet == false) {
+            print "---------------------------------------"
+            print "starting:"
+            print "loc:          ${[particleLoc[0], particleLoc[1], particleLoc[2]]}"
+            print "elemGrade:    ${particleElemGrade}"
+            print "elemID:       ${particleElemID}"
+            print "dir:          ${[dir[0],dir[1],dir[2]]}"
+            print "len:          ${len}"
+            print "---------------------------------------"
+            print "\n"
+        }
+        if (abs(len) < 1e-12) {
+            var point = Object()
+            point.loc = particleLoc
+            point.elemGrade = particleElemGrade
+            point.elemID = particleElemID
+            point.vectDir = dir
+            point.vectLen = len            
+        } else {
+            var vectDir = dir/dir.norm()
+            var vectLen = len
+            while (abs(vectLen) > 1e-12) {
+                point = self.movementStep(point, vectDir, vectLen, quiet)
+                vectDir = point.vectDir
+                vectLen = point.vectLen
+            }
+        }
+        return point
+    }
+}
+
+class Substrate {
+    init (mesh, testing=false, timingfunc=nil, numTestTrials=1) {
+        self.mesh = mesh
+        self.testing = testing
+        self.testDict = Dictionary()
+        self.meshConn = MeshConnectivity(self.mesh)
+        self.vertexHelper = VertexHelper(self.meshConn)
+        self.kdHelper = KDHelper(self.mesh)
+        self.faceKD = FaceKDHelper(self.meshConn)
+        self.edgeKD = EdgeKDHelper(self.meshConn)
+        self.faceHelper = FaceHelper(self.faceKD, self.edgeKD)
+        self.starHelper = StarHelper(self.vertexHelper, self.faceHelper)
+        self.starProjector = StarProjector(self.starHelper)
+        self.particleMover = ParticleMover(self.faceHelper, self.starProjector)
+    }
+}
+
+class Particles {
+    init (particlesMesh) {
+        self.numPoints = particlesMesh.count(0)
+        self.projectablePoints = particlesMesh.clone()
+        self.projectablePointLocs = particlesMesh.vertexmatrix().clone()
+        self.projectedPoints = nil
+        self.projectedPointLocs = nil
+        self.projectedPointDetails = nil
+        self.movedPoints = nil
+        self.movedPointLocs = nil
+        self.movedPointDetails = nil
+        self.points = nil
+        self.pointLocs = nil
+        self.pointDetails = nil
+    }
+
+    resetPoints(particlesMesh) {
+        self.init(particlesMesh)
+    }
+
+    project (SubstrateObj) {
+        var projectedPoints = self.projectablePoints.clone()
+        var projectedPointDetails = []
+        for (i in 0...self.numPoints) {
+            var x = self.projectablePointLocs.column(i)
+            var p_c = SubstrateObj.kdHelper.tree.nearest(x).id
+            var projPt = SubstrateObj.starProjector.getClosestMeshPt(x=x, centerIndex=p_c)
+            // starProjector return format:
+            /*
+            var result = Object()
+            result.loc = x_fin_proj
+            result.elemGrade = elemGrade
+            result.elemID = elemID
+            return result
+            */
+            projectedPointDetails.append(projPt)
+            projectedPoints.vertexmatrix().setcolumn(i, projPt.loc)
+        }
+        self.projectedPoints = projectedPoints
+        self.projectedPointLocs = projectedPoints.vertexmatrix()
+        self.projectedPointDetails = projectedPointDetails
+        self.points = self.projectedPoints.clone()
+        self.pointLocs = self.projectedPointLocs.clone()
+        self.pointDetails = self.projectedPointDetails.clone()
+    }
+
+    moveAll (SubstrateObj, force, stepsize=1, quiet=true) {
+        var movedPoints = self.projectedPoints.clone()
+        var movedPointDetails = []
+        var forceMatrix = force.getForceMatrix(self.pointLocs) // this will need to get tweaked later to play with Functionals
+        for (i in 0...forceMatrix.dimensions()[1]) {
+            var vector = stepsize*forceMatrix.column(i)
+            var len = vector.norm()
+            var dir
+            if (len > 0) {
+                dir = vector/vector.norm()
+            } else {
+                dir = vector
+            }
+            var x = self.pointDetails[i]
+            if (quiet != true) {
+                print "Moving:  ${i+1}/${self.numPoints}"
+                print "dir:     ${[dir[0],dir[1],dir[2]]}"
+                print "len:     ${len}"
+                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
+            }
+            var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
+            // movement return format:
+            /*
+            var result = Object()
+            result.loc = particleLoc + movementVect
+            result.elemGrade = endingElemGrade
+            result.elemID = endingElemID
+            result.vectDir = dir
+            result.vectLen = len - movementVect.norm()
+            return result
+            */
+            movedPointDetails.append(movedPt)
+            movedPoints.vertexmatrix().setcolumn(i, movedPt.loc)
+        }
+        self.movedPoints = movedPoints
+        self.movedPointLocs = movedPoints.vertexmatrix()
+        self.movedPointDetails = movedPointDetails
+        self.points = self.movedPoints.clone()
+        self.pointLocs = self.movedPointLocs.clone()
+        self.pointDetails = self.movedPointDetails.clone()
+    }
+
+    moveAllLoop (SubstrateObj, force, steps, stepsize=1, stepQuiet=true, loopQuiet=true) {
+        for (i in 1..steps) {
+            if (loopQuiet == true) {
+                if (mod(i,floor(steps/10))==0) {
+                    print "movement step: ${i}"
+                }                
+            }
+            self.moveAll(SubstrateObj, force, stepsize=stepsize, quiet=stepQuiet)
+        }
+    }
+
+    moveOnebyOne (SubstrateObj, force, stepsize=1, quiet=true) {
+        var points = self.points
+        var pointLocs = self.pointLocs
+        var pointDetails = self.pointDetails
+        for (i in 0...self.numPoints) {
+            var vector = stepsize*force.totalForce(pointLocs, i)
+            var len = vector.norm()
+            var dir
+            if (len > 0) {
+                dir = vector/vector.norm()
+            } else {
+                dir = vector
+            }
+            var x = pointDetails[i]
+            if (quiet != true) {
+                print "Moving:  ${i+1}/${self.numPoints}"
+                print "dir:     ${[dir[0],dir[1],dir[2]]}"
+                print "len:     ${len}"
+                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
+            }
+            var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
+            // movement return format:
+            /*
+            var result = Object()
+            result.loc = particleLoc + movementVect
+            result.elemGrade = endingElemGrade
+            result.elemID = endingElemID
+            result.vectDir = dir
+            result.vectLen = len - movementVect.norm()
+            return result
+            */
+            points.vertexmatrix().setcolumn(i, movedPt.loc)
+            pointLocs = points.vertexmatrix()
+            pointDetails[i] = movedPt
+        }
+        self.points = points
+        self.pointLocs = pointLocs
+        self.pointDetails = pointDetails
+        self.movedPoints = points
+        self.movedPointLocs = pointLocs
+        self.movedPointDetails = pointDetails
+    }
+    moveOnebyOneLoop (SubstrateObj, force, steps, stepsize=1, stepQuiet=true, loopQuiet=true) {
+        for (i in 1..steps) {
+            if (loopQuiet == true) {
+                if (mod(i,floor(steps/10))==0) {
+                    print "movement step: ${i}"
+                }                
+            }
+            self.moveOnebyOne(SubstrateObj, force, stepsize=stepsize, quiet=stepQuiet)
+        }
+    }
+}
+
+class ParticlePlotter{
+    plot(ParticlesObj, SubstrateObj, substrateGrade=nil, projectablePoints=false, projectedPoints=false, movedPoints=false, quiet=false) {
+        if (substrateGrade == nil) {
+            var substrateGrade = [2]
+        }
+        var gMesh = plotmesh(SubstrateObj.mesh, grade=substrateGrade)
+        var gCombined = gMesh
+        if (projectablePoints == true) {
+            var gProjectable = plotmesh(ParticlesObj.projectablePoints, grade=[0], color=[255,0,0])              
+            gCombined += gProjectable.clone()
+        }
+        if (projectedPoints == true) {
+            var gProjected = plotmesh(ParticlesObj.projectedPoints, grade=[0], color=[0,0,255])              
+            gCombined += gProjected.clone()
+        }
+        if (movedPoints == true) {
+            var gMoved = plotmesh(ParticlesObj.movedPoints, grade=[0], color=[0,255,0])              
+            gCombined += gMoved.clone()
+        }
+        Show(gCombined)
+    }
+}
+
+class Force{
+    init(func) {
+        self.func = func
+    }
+    getForceMatrix(particleLocs) {
+        var n = particleLocs.dimensions()[1]
+        var out = Matrix(3, n)
+        for (i in 0...n) {
+            out.setcolumn(i, self.totalForce(particleLocs, i))
+        }
+        return out
+    }
+}
+
+class PairwiseForce is Force{
+    force(x, y) {
+        return self.func(x, y)
+    }
+    totalForce(particleLocs, index) {
+        var out = Matrix([0,0,0])
+        var n = particleLocs.dimensions()[1]
+        var x = particleLocs.column(index)
+        for (i in 0...n) {
+            if (i != index) {
+                var y = particleLocs.column(i)
+                out += self.force(x, y)
+            }
+        }
+        return out
+    }
+}
+
+class SinglePositionForce is Force{
+    force(x) {
+        return self.func(x)
+    }
+    totalForce(particleLocs, index) {
+        return self.force(particleLocs.column(index))
+    }
+}
+
+class ConstantForce is Force{
+    init(vector) {
+        self.vector = vector
+        self.func = self.returnConstant
+    }
+    returnConstant(x) {
+        return x
+    }
+    force(x) {
+        return self.func(self.vector)
+    }
+    totalForce(particleLocs, index) {
+        return self.force(self.vector)
+    }
+}
+
+class ElectrostaticPairwise is PairwiseForce{
+    init() {
+        self.func = self.electrostaticForce
+    }
+    electrostaticForce(x,y) {
+        if ((x-y).norm() < 1e-8) {
+            return Matrix([0,0,0])
+        } else {
+            return 1/distSqXY(x,y)*unitXY(x, y)
+        }
+    }
+}
+
+class XYSwirl is SinglePositionForce {
+    func(x) {
+        return Matrix([-x[1], x[0], 0])
+    }
+}
+
+class XZSwirl is SinglePositionForce {
+    func(x) {
+        return Matrix([-x[2], 0, x[0]])
+    }
+}
+
+class YZSwirl is SinglePositionForce {
+    func(x) {
+        return Matrix([0, -x[2], x[1]])
+    }
+}
+
+class ParticlesForceMatrix {
+    init(particleLocs, forceFunctional) {
+        self.matrix = self.getMatrix()
+    }
+    getMatrix(particleLocs, forceFunctional) {
+        var n = particleLocs.dimensions()[1]
+        var out = Matrix(3, n)
+        for (i in 0...n) {
+            out.setcolumn(i, forceFunctional.totalForce(particleLocs, i))
+        }
+        return out
+    }
+}

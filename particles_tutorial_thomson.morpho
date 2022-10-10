@@ -2,7 +2,7 @@ import meshtools
 import plot
 import optimize
 
-import "Particles.morpho" 
+import "morpho-particles.morpho" 
 import "RandomPoints.morpho"
 
 // 1. Build substrate mesh
