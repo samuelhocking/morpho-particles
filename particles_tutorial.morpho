@@ -66,10 +66,6 @@ var p = Particles(particleMesh)
 
 // 5. Project particles onto substrate (Particles object method, Substrate object argument)
 p.project(s)
-print("matrix")
-print(p.projectedPoints.vertexmatrix())
-print("locs")
-print(p.projectedPointLocs)
 
 // 6. Define Force object
 var e1 = Matrix([1,0,0])
