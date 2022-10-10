@@ -1,126 +1,163 @@
-# Particles Module
-
-Author  : Sam Hocking
-
-Particles.morpho is a module to facilitate populating a mesh with point particles and moving those particles on the mesh surface subject to a specified force vector. 
+# morpho-particles
 
 ## Installation
 
-Place Particles.morpho in the same directory as the `Morpho` script that requires the module (i.e. the included particles_demo.morpho file) and include the following in the script:
-```
-import "Particles.morpho"
-```
-## Contents
+Place `morpho-particles.morpho`, `DictlikeSetOps.morpho`, `LinAlgTools.morpho`, and `RandomPoints.morpho` in your current working directory. Import `morpho-particles.morpho` and `RandomPoints.morpho` with the `import` command:
 
-Particle projection and movement demonstrations:
-- particles_demo.morpho
-- particles_thomson_demo.morpho
-
-Utilities:
-- RandomPoints.morpho
-- DictlikeSetOps.morpho
-- LinAlgTools.morpho
-- MeshChecker.morpho
-- Tester.morpho
-
-Primary performance testing file:
-- particles_testing_demo.morpho
-
-And related files to facilitate testing by exporting performance dicts in plaintext to `Python`, forming a `DataFrame`, and plotting with `matplotlib`:
-- dictImportTools.py
-- dictPlotter.py
-- dictToPython.morpho
+	import "morpho-particles.morpho" 
+	import "RandomPoints.morpho"
 
 ## Usage
+### Basic Example
 
-The typical process to use the `Particles` module is to:
-1. Initialize `mesh`
-2. Initialize list of random points using `RandomPoints`
-3. Initialize a `Particles` object
-4. Project random points onto mesh
-5. Apply force vectors to mesh particles
+Set up a mesh. For example, a flat plane:
 
-## RandomPoints
+	var verts = [
+	    [-1,1,0] ,[0,1,0] ,[1,1,0],
+	    [-1,0,0] ,[0,0,0] ,[1,0,0],
+	    [-1,-1,0],[0,-1,0],[1,-1,0]
+	]
+	var edges = [
+	    [0,1],
+	    [1,2],
+	    [0,3],
+	    [0,4],
+	    [1,4],
+	    [1,5],
+	    [2,5],
+	    [3,4],
+	    [4,5],
+	    [3,6],
+	    [3,7],
+	    [4,7],
+	    [4,8],
+	    [5,8],
+	    [6,7],
+	    [7,8]
+	]
+	var faces = [
+	    [0,1,4],
+	    [0,3,4],
+	    [1,2,5],
+	    [1,4,5],
+	    [3,4,7],
+	    [3,6,7],
+	    [4,5,8],
+	    [4,7,8]
+	]
+	var mb = MeshBuilder()
+	for (v in verts) mb.addvertex(v)
+	for (e in edges) mb.addedge(e)
+	for (f in faces) mb.addface(f)
+	var plane = mb.build()
+	var mesh = plane
 
-The `RandomPoints` module is used to generate a list of random coordinate vectors.
+Initialize a `Substrate` object using the surface mesh.
 
-`GenRandomRectangle` produces points within a rectangular prism region:
+	var s = Substrate(mesh)
+
+Initialize a cloud of projectable points. You might use a method from `RandomPoints.morpho`, such as `GenParametrizedLine` to generate points along a parametrized vector function.
+
+	var func = fn (t) (Matrix([-0.5,t,1]))
+	var ptsArr = GenParametrizedLine(
+	    func,
+	    tStart = -1,
+	    tEnd = 1,
+	    numPts = 20
+	    )
+
+From the point cloud, build a disconnected mesh of vertices.
+
+	var mbb = MeshBuilder()
+	for (x in ptsArr) mbb.addvertex(x)
+	var particleMesh = mbb.build()
+
+Initialize a `Particles` object with a particle mesh argument:
+
+	var p = Particles(particleMesh)
+
+One of the key functions of the `Particles` object is to project points onto a subtrate surface. This is accomplished by calling the `project` method of the `Particles` object with a `Substrate` object argument.
+
+	p.project(s)
+	
+The coordinates of these projected points can be accessed via the `projectedPointLocs` method.
+
+To move the particles on the mesh surface, we need to define a force function. The `morpho-particles` module has some helpful methods to do this. The user can specify a constant force for which all particles experience the same force.
+
 ```
-var ptsArr = GenRandomRectangle(1000, xBounds=[-2,2], yBounds=[-2,2], zBounds=[-2,2])
+var e1 = Matrix([1,0,0])
+var e2 = Matrix([0,1,0])
+var e3 = Matrix([0,0,1])
+var f=ConstantForce((1*e1))
 ```
+`f` is defined as a force with magnitude 1 in the **x** direction
+The `SinglePositionForce` allows the user to define a function of only each particle's position.
 
-`GenParametrizedBall` produces deterministic (non-random) points within a parameterized ball:
-```
-var ptsArr = GenParametrizedBall(r=1, usteps=5, vsteps=5, wsteps=5)
-```
-`usteps` controls the number of longitudinal steps
-`vsteps` controls the number of latitudinal steps
-`wsteps` controls the number of steps along the radius
+	var f=SinglePositionForce(fn (x) Matrix([-x[1], x[0], 0])
 
-`GenRandomSphere` produces random points on the surface of a sphere of radius `r`:
-```
-var ptsArr = GenRandomSphere(1000, r=1)
-```
+The function above would generate an counterclockwise angular force on each particle.
 
-`GenRandomBall` produces random points within a spherical ball region withi radius `r`:
-```
-var ptsArr = GenRandomBall(1000, r=1)
-```
+Now, the user can call a movement method to apply the force function on a specified substrate. `moveAll` calculates all of the movement vectors at once then applies them sequentially one time.
 
-## Initialization
+	p.moveAll(s, f)
 
-Initializing a `Particles` object is easy. Pass the mesh object as an argument to the `Particles` constructor:
-```
-var p = Particles(mesh)
-```
+It is also useful to employ a movement loop by which the force is calculated and applied in small steps. `moveAllLoop` accomplishes this for a specified number of steps and step size, which scales the calculated force vectors by that scalar value.
 
-## Projection
+	p.moveAllLoop(s, f, 1000, stepsize=0.00001)
 
-Projecting points in space onto the mesh surface is also simple. Call the `project` method with the list of points as an argument:
-```
-p.project(ptsArr)
-```
+A built-in plotting object, `ParticlePlotter` is also included to faciliate plotting the groups of projectable points, projected point, and moved points. Any of the preceding groups are omitted by default.
 
-(Under construction)
+	var pp = ParticlePlotter()
+	pp.plot(
+		p,
+		s,
+		substrateGrade=[2],
+		projectablePoints=true,
+		projectedPoints=true,
+		movedPoints=true
+		)
+	
+### Torus Example
 
-## Forces
+We can also explore particle movement on a more complex surface like a torus.
 
-The `Particles` module offers multiple force objects.
+	var r=1 
+	var a=0.35
+	var impl = ImplicitMeshBuilder(
+	    fn (x,y,z) (x^2+y^2+z^2+r^2-a^2)^2 - 4*r^2*(x^2+y^2)
+	    )
+	var torus = impl.build(
+	    start=Matrix([1,0,0.5]),
+	    stepsize=0.25,
+	    maxiterations=400
+	    )
+	torus.addgrade(1)
+	var mesh = torus
+	
+Instead of a line, we can also generate a random cloud of projectable points.
 
-### Pairwise
+	var ptsArr = GenRandomRectangle(
+	    1000,
+	    xBounds=[-2,0],
+	    yBounds=[-2,0],
+	    zBounds=[-2,2]
+	    )
+	var mbb = MeshBuilder()
+	for (x in ptsArr) mbb.addvertex(x)
+	var particleMesh = mbb.build()
 
-`PairwiseForce` computes a force based on the locations of a pair of particles
+This function generates a randomly distributed cloud of points within a rectangular prism of the specified bounds.
 
-### SinglePosition
+As before, we can apply a force.
 
-`SinglePositionForce` computes a force based on the location of a single particle
+	var p = Particles(particleMesh)
+	p.project(s)
+	
+	var e1 = Matrix([1,0,0])
+	var e2 = Matrix([0,1,0])
+	var e3 = Matrix([0,0,1])
+	
+	var f = ConstantForce(1*e1+1*e2)
+	p.moveAll(s, f)
 
-### Constant
-
-`ConstantForce` computes a constant force
-
-## Movement
-
-Force vectors can be applied to move particle either in two ways.
-
-### moveAll
-
-`moveAll` computes the set of force vectors for the entire set of vectors at once, then moves them sequentially. Calling `moveAll` will take one step of the specified force.
-```
-p.moveAll(ConstantForce(Matrix([1,0,0])), stepsize=1, quiet=true)
-```
-
-### moveAllLoop
-
-`moveAllLoop` takes a specified number of `moveAll` steps.
-```
-p.moveAllLoop(1000, ElectrostaticPairwise(), stepsize=0.0001, stepQuiet=true, loopQuiet=true)
-```
-
-### moveOneByOne
-
-`moveOneByOne` computes one force vector at a time, moves that particles, then calculates the next force vector. It has the same arguments as `moveAll`.
-
-### moveOneByOneLoop
-
-`moveOneByOneLoop` takes a specified number of `moveOneByOne` steps and has the same arguments as `moveAllLoop`.
+Notice that the particles remain constrained to the mesh.
