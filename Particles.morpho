@@ -1012,7 +1012,7 @@ class ParticleMover{
         var particleElemGrade = particleInfoArr[1]
         var particleElemID = particleInfoArr[2]
         var closestFace = self.getClosestFace(particleInfoArr, dir, len)
-        var unit_vx = dir/dir.norm()  
+        var unit_vx = dir/dir.norm()
         var vx = len*unit_vx
         var result, printTag
         if (particleElemGrade == 2) { // SECTION 1: PARTICLE GRADE 2 (FACE)
