@@ -9,8 +9,8 @@ import "RandomPoints.morpho"
 // 1. Build substrate mesh
 // var m = Mesh("sphere_r_0.62035_vol_1_194_vertices.mesh")
 // var m = Mesh("sphere_r_0.62035_vol_1_770_vertices.mesh")
-var m = Mesh("sphere_r_1_vol_4.18879_194_vertices.mesh")
-// var m = Mesh("sphere_r_1_vol_4.18879_770_vertices.mesh")
+// var m = Mesh("sphere_r_1_vol_4.18879_194_vertices.mesh")
+var m = Mesh("sphere_r_1_vol_4.18879_770_vertices.mesh")
 
 // 2. Initialize Substrate object with substrate mesh argument
 var s = Substrate(m)
