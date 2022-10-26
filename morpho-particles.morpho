@@ -1251,6 +1251,51 @@ class Particles {
         self.pointDetails = self.projectedPointDetails.clone()
     }
 
+    calcMovement (SubstrateObj, force, stepsize=1, quiet=true) {
+        var initialPointsMatrix = self.points.vertexmatrix().clone()
+        var movedPointsMatrix = initialPointsMatrix.clone()
+        var movedPointDetails = []
+        // var forceMatrix = force.getForceMatrix(self.pointLocs) // this will need to get tweaked later to play with Functionals
+        var forceMatrix = force
+        for (i in 0...forceMatrix.dimensions()[1]) {
+            var vector = stepsize*forceMatrix.column(i)
+            var len = vector.norm()
+            var dir
+            if (len > 0) {
+                dir = vector/vector.norm()
+            } else {
+                dir = vector
+            }
+            var x = self.pointDetails[i]
+            if (quiet != true) {
+                print "Moving:  ${i+1}/${self.numPoints}"
+                print "dir:     ${[dir[0],dir[1],dir[2]]}"
+                print "len:     ${len}"
+                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
+            }
+            var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
+            // movement return format:
+            /*
+            var result = Object()
+            result.loc = particleLoc + movementVect
+            result.elemGrade = endingElemGrade
+            result.elemID = endingElemID
+            result.vectDir = dir
+            result.vectLen = len - movementVect.norm()
+            return result
+            */
+            movedPointDetails.append(movedPt)
+            movedPointsMatrix.setcolumn(i, movedPt.loc)
+        }
+        var returnObj = Object()
+        // location delta
+        returnObj.locDelta = movedPointsMatrix - initialPointsMatrix
+        returnObj.pointLocs = movedPointsMatrix
+        returnObj.pointDetails = movedPointDetails
+        return returnObj
+    }
+
     moveAll (SubstrateObj, force, stepsize=1, quiet=true) {
         var movedPoints = self.projectedPoints.clone()
         var movedPointDetails = []
@@ -1376,7 +1421,8 @@ class ParticlePlotter{
             gCombined += gProjected.clone()
         }
         if (movedPoints == true) {
-            var gMoved = plotmesh(ParticlesObj.movedPoints, grade=[0], color=[0,255,0])              
+            // var gMoved = plotmesh(ParticlesObj.movedPoints, grade=[0], color=[0,255,0])              
+            var gMoved = plotmesh(ParticlesObj.points, grade=[0], color=[0,255,0])              
             gCombined += gMoved.clone()
         }
         Show(gCombined)

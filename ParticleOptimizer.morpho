@@ -1,0 +1,50 @@
+// Particle optimizer
+// By: Sam Hocking
+
+import optimize
+
+class ParticleOptimizer is ShapeOptimizer {
+    init(problem, particlesObj, substrateObj) {
+        super.init(problem, particlesObj.points)
+        self.particlesObj = particlesObj
+        self.substrateObj = substrateObj
+    }
+
+    /* Perform relaxation at fixed stepsize */
+    prelax(n) {
+        if (self.energy.count()==0) self.energy.append(self.totalenergy())
+        print("initial energy ${self.energy}")
+
+        for (i in 0...n) {
+        self.force = self.totalforcewithconstraints()
+        self.pstep(self.stepsize)
+        self.energy.append(self.totalenergy()) // Track the total energy
+        self.report(i)
+        if (self.hasconverged()) break
+        }
+        return self.energy
+    }
+
+    /* Take a step */
+    pstep(stepsize) {
+        var target = self.gettarget()
+        // print target
+        var frc = self.force*stepsize*(-1) // Use the force
+        // print frc.transpose()
+
+        if (!frc) return
+
+        var movement = self.particlesObj.calcMovement(self.substrateObj, frc)
+
+        // target.acc(1, movement.locDelta)
+        self.particlesObj.points.setvertexmatrix(movement.pointLocs)
+        self.particlesObj.pointLocs = target
+        self.particlesObj.pointDetails = movement.pointDetails
+
+        // self.initlocalconstraints()
+        // self.reprojectlocalconstraints() // Reproject onto local constraints
+
+        // self.reprojectconstraints() // Push back onto constraints
+    }
+}
+
