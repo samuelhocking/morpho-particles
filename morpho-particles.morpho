@@ -1443,6 +1443,15 @@ class Force{
     }
 }
 
+class ConstantMatrixForce is Force{
+    init(matrix) {
+        self.matrix = matrix
+    }
+    totalForce(particleLocs, index) {
+        return self.matrix.column(index)
+    }
+}
+
 class PairwiseForce is Force{
     force(x, y) {
         return self.func(x, y)
