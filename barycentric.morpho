@@ -1,0 +1,106 @@
+// Barycentric coordinate functions
+// By: Sam Hocking
+
+/*
+Let the vector r=(x,y,z) be a cartesian point in the plane of a triangle with vertices vi=(xi,yi,zi), i in {1,2,3}
+We seek a transformation from r to Barycentric coordinates l = (lam1, lam2, lam3) where lam1+lam2+lam3=1
+And an accompanying inverse transformation
+
+         [x1-x3, x2-x3, x3  ]
+Let T  = [y1-y3, y2-y3, y3  ]
+         [z1-z3, z2-z3, z3  ]
+and l  = [lam1 , lam2 , lam3].T = [lam1 , lam2 , 1-lam1-lam2].T
+and ll = [lam1 , lam2 , 1   ].T
+
+then:
+r = T * ll
+and conversely:
+ll = T^-1 * r
+
+To ensure T is invertible, we must check if each of xi, yi, or zi are all equal to zero.
+Equivalently, we check if ||[x1, x2, x3]||=0 (and similarly for y and z).
+If so, we define a 3-dimensional column vector eps and with epsilon>0 s.t.
+        [epsilon if ||[x1, x2, x3]||=0 else 0]
+eps =   [epsilon if ||[y1, y2, y3]||=0 else 0]
+        [epsilon if ||[z1, z2, z3]||=0 else 0]
+and define translated vertices:
+vvi = vi + eps
+Generating T as above from the translated vertices will be invertible.
+*/
+
+fn translateVerts(v1, v2, v3, eps=1) {
+    var A = Matrix(3,3)
+    A.setcolumn(0, v1)
+    A.setcolumn(1, v2)
+    A.setcolumn(2, v3)
+    var returnObj = Object()
+    var epsVect = Matrix([0,0,0])
+    for (i in 0...3) {
+        // grab all xij for each of j vertices
+        var b = A.transpose().column(i)
+        if (b.norm() <= 1e-8)
+        epsVect[i] = eps
+    }
+    returnObj.vv1 = v1 + epsVect
+    returnObj.vv2 = v2 + epsVect
+    returnObj.vv3 = v3 + epsVect
+    returnObj.epsVect = epsVect
+    return returnObj
+}
+
+fn makeT(v1, v2, v3) {
+    return Matrix([
+        [v1[0]-v3[0], v2[0]-v3[0], v3[0]],
+        [v1[1]-v3[1], v2[1]-v3[1], v3[1]],
+        [v1[2]-v3[2], v2[2]-v3[2], v3[2]]
+    ])  
+}
+
+fn makeTinv(v1, v2, v3) {
+    var T = makeT(v1, v2, v3)
+    var I = Matrix([
+        [1,0,0],
+        [0,1,0],
+        [0,0,1]
+    ])
+    try {
+        return I/T
+    } catch {
+        "MtrxSnglr" : print("the Matrix is singular")
+    }
+}
+
+fn makeLamVect(l) {
+    return Matrix([l[0], l[1], 1])
+}
+
+fn lamCoordsFromLamVect(lamVect) {
+    return Matrix([lamVect[0], lamVect[1], 1-lamVect[0]-lamVect[1]])
+}
+
+fn C2B(x, v1, v2, v3) {
+    var vertPrime = translateVerts(v1, v2, v3)
+    var Tinv = makeTinv(vertPrime.vv1, vertPrime.vv2, vertPrime.vv3)
+    var ll = Tinv * (x + vertPrime.epsVect)
+    return lamCoordsFromLamVect(ll)
+}
+
+fn B2C(l, v1, v2, v3) {
+    var vertPrime = translateVerts(v1, v2, v3)
+    var ll = makeLamVect(l)
+    var T = makeT(vertPrime.vv1, vertPrime.vv2, vertPrime.vv3)
+    return T * ll - vertPrime.epsVect
+}
+
+// test
+// var v1 = Matrix([0,0,0])
+// var v2 = Matrix([1,0,0])
+// var v3 = Matrix([0,1,0])
+var v1 = Matrix([1,0,0])
+var v2 = Matrix([0,1,0])
+var v3 = Matrix([0,0,1])
+
+print(B2C(Matrix([0.5,0.5,0  ]), v1, v2, v3).transpose())
+print(B2C(Matrix([0  ,0.5,0.5]), v1, v2, v3).transpose())
+print(B2C(Matrix([0.5,0  ,0.5]), v1, v2, v3).transpose())
+print(B2C(Matrix([1/3,1/3,1/3]), v1, v2, v3).transpose())
