@@ -3,6 +3,18 @@
 
 import "LinAlgTools.morpho"
 
+// For a face with vertices v0, v1, and v2, we want to define a new coordinate system relative to those vertices
+// First axis defined by unit direction from v0 to v1, ut0
+// Second axis defined by unit direction from v0 to v2, ut1
+// Third axis is defined by the unit surface normal, which is the normalized cross product ut0 x ut1 = ut2
+//   (doesn't matter which orientation since the coordinate for particles on the face will be zero)
+//   (we just need a linearly independent third axis)
+// Transformation matrix T: B->C where B are barycentric coordinates lamda0, lambda1, lambda2 and C are certesian coordinates
+//   given by:      [ |   |   | ]
+//              T = [ut0 ut1 ut2]
+//                  [ |   |   | ]
+// The inverse transformation is T-1: C->B
+
 fn MakeT(v0, v1, v2) {
     var t0 = v1 - v0
     var t1 = v2 - v0
