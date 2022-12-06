@@ -1403,20 +1403,10 @@ class Particles {
             self.moveOnebyOne(SubstrateObj, force, stepsize=stepsize, quiet=stepQuiet)
         }
     }
-    getBaryCentricCoords (SubstrateObj) {
-        continue
-    }
-    // transport (SubstrateObj) {
-    //     // get current (pre-substrate movement)
-    // }
 }
 
-// class Transporter {
-
-// }
-
 class ParticlePlotter{
-    plot(ParticlesObj, SubstrateObj, substrateGrade=nil, projectablePoints=false, projectedPoints=false, movedPoints=false, quiet=false) {
+    plot(ParticlesObj, SubstrateObj, substrateGrade=nil, projectablePoints=false, projectedPoints=false, points=false, quiet=false) {
         if (substrateGrade == nil) {
             var substrateGrade = [2]
         }
@@ -1430,8 +1420,7 @@ class ParticlePlotter{
             var gProjected = plotmesh(ParticlesObj.projectedPoints, grade=[0], color=[0,0,255])              
             gCombined += gProjected.clone()
         }
-        if (movedPoints == true) {
-            // var gMoved = plotmesh(ParticlesObj.movedPoints, grade=[0], color=[0,255,0])              
+        if (points == true) {        
             var gMoved = plotmesh(ParticlesObj.points, grade=[0], color=[0,255,0])              
             gCombined += gMoved.clone()
         }
