@@ -81,4 +81,4 @@ p.moveAll(s, f)
 var pp = ParticlePlotter()
 
 // 9. Plot
-pp.plot(p, s, substrateGrade=[2], projectablePoints=true, projectedPoints=true, movedPoints=true)
+pp.plot(p, s, substrateGrade=[2], projectablePoints=true, projectedPoints=true, points=true)

@@ -1,0 +1,53 @@
+// Barycentric Coordinate Tools
+// By: Sam Hocking
+
+import "LinAlgTools.morpho"
+
+fn MakeT(v0, v1, v2) {
+    var t0 = v1 - v0
+    var t1 = v2 - v0
+    var t2 = cross(t0, t1)
+    var ut0 = t0/t0.norm()
+    var ut1 = t1/t1.norm()
+    var ut2 = t2/t2.norm()
+    var m = Matrix(3,3)
+    m.setcolumn(0, ut0)
+    m.setcolumn(1, ut1)
+    m.setcolumn(2, ut2)
+    return m
+}
+
+fn CartToBary (x, v0, v1, v2) {
+    return inv(MakeT(v0, v1, v2)) * (x-v0)
+}
+
+fn BaryToCart (lamCoords, v0, v1, v2) {
+    return v0 + MakeT(v0, v1, v2) * lamCoords
+}
+
+// test
+
+// var v0 = Matrix([1,0,0])
+// var v1 = Matrix([2,0,0])
+// var v2 = Matrix([2,1,0])
+
+// var x = Matrix([1+2/3,1/3,0])
+
+// print("Expect: [ 1.33333 0.471405 0 ]")
+// print(CartToBary(x, v0 , v1, v2).transpose())
+// print("")
+// print("Expect: [ 1.66667 0.333333 0 ]")
+// print(BaryToCart(CartToBary(x, v0 , v1, v2), v0 , v1, v2).transpose())
+
+// var x = Matrix([1/2,1/4,1/2])
+
+// var v0 = Matrix([0,0,0])
+// var v1 = Matrix([1,0,1])
+// var v2 = Matrix([0,1,0])
+
+// print("")
+// print("Expect: [ 0.707107 0.25 0 ]")
+// print(CartToBary(x, v0 , v1, v2).transpose())
+// print("")
+// print("Expect: [ 0.5 0.25 0.5 ]")
+// print(BaryToCart(CartToBary(x, v0 , v1, v2), v0 , v1, v2).transpose())

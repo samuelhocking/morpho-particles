@@ -1,0 +1,385 @@
+import meshtools
+import plot
+import optimize
+
+import "morpho-particles.morpho" 
+import "RandomPoints.morpho"
+import "LinAlgTools.morpho"
+import "BaryTools.morpho"
+
+// 1. Build substrate mesh
+
+//----------------
+//| Simple shape |
+//----------------
+// var verts = [
+//     [0,0,0] ,
+//     [1,0,1] ,
+//     [0,1,0] ,
+//     [1,0,0]
+// ]
+// var edges = [
+//     [0,1],
+//     [1,2],
+//     [2,0],
+//     [0,3], 
+//     [3,2]
+// ]
+// var faces = [
+//     [0,1,2],
+//     [0,3,2]
+// ]
+// var mb = MeshBuilder()
+// for (v in verts) mb.addvertex(v)
+// for (e in edges) mb.addedge(e)
+// for (f in faces) mb.addface(f)
+// var plane = mb.build()
+// var mesh = plane
+
+//----------------
+//| Sphere       |
+//----------------
+// var mesh = Mesh("sphere_r_1_vol_4.18879_770_vertices.mesh")
+
+//----------------
+//| Tetrahedron  |
+//----------------
+// var verts = [[0, 0.57735027, -0.25],[-0.5,-0.28867513,-0.25],[0.5,-0.28867513,-0.25],[0,0,0.5]]
+// var edges = [[0,1],[0,2],[1,2],[0,3],[1,3],[2,3]]
+// var faces = [[0,1,2],[0,1,3],[1,2,3],[0,2,3]]
+// var mb = MeshBuilder()
+// for (v in verts) mb.addvertex(v)
+// for (e in edges) mb.addedge(e)
+// for (f in faces) mb.addface(f)
+// var tetra = mb.build()
+// var mesh = tetra
+
+//----------------
+//| Cube         |
+//----------------
+// var len = 1
+// var cube = PolyhedronMesh(
+//     [len*Matrix([-0.5,-0.5,-0.5]),
+//      len*Matrix([-0.5,0.5,-0.5]),
+//      len*Matrix([0.5,-0.5,-0.5]),
+//      len*Matrix([0.5,0.5,-0.5]),
+//      len*Matrix([-0.5,-0.5,0.5]),
+//      len*Matrix([-0.5,0.5,0.5]),
+//      len*Matrix([0.5,-0.5,0.5]),
+//      len*Matrix([0.5,0.5,0.5])],
+//     [[0,1,3,2],
+//      [0,1,5,4],
+//      [2,3,7,6],
+//      [1,3,7,5],
+//      [0,2,6,4],
+//      [4,5,7,6]])
+// cube.addgrade(1)
+// var mesh = cube
+
+//--------------------
+//| Small flat plane |
+//--------------------
+// var verts = [
+//     [0,1,0] ,[1,1,0],
+//     [0,0,0] ,[1,0,0]
+// ]
+// var edges = [
+//     [0,1],
+//     [0,2],
+//     [0,3],
+//     [1,3],
+//     [2,3]
+// ]
+// var faces = [
+//     [0,1,3],
+//     [0,2,3]
+// ]
+// var mb = MeshBuilder()
+// for (v in verts) mb.addvertex(v)
+// for (e in edges) mb.addedge(e)
+// for (f in faces) mb.addface(f)
+// var plane = mb.build()
+// var mesh = plane
+
+//--------------------
+//| One face         |
+//--------------------
+// var verts = [
+//     [0,1,0] ,
+//     [0,0,0] ,[1,0,0]
+// ]
+// var verts = [
+//     [0,1,0] ,[1,1,0],
+//     [0,0,0]
+// ]
+// var edges = [
+//     [0,1],
+//     [1,2],
+//     [2,0]
+// ]
+// var faces = [
+//     [0,1,2]
+// ]
+// var mb = MeshBuilder()
+// for (v in verts) mb.addvertex(v)
+// for (e in edges) mb.addedge(e)
+// for (f in faces) mb.addface(f)
+// var plane = mb.build()
+// var mesh = plane
+
+//--------------------
+//| Flat plane       |
+//--------------------
+// var verts = [
+//     [-1,1,0] ,[0,1,0] ,[1,1,0],
+//     [-1,0,0] ,[0,0,0] ,[1,0,0],
+//     [-1,-1,0],[0,-1,0],[1,-1,0]
+// ]
+// var edges = [
+//     [0,1],
+//     [1,2],
+//     [0,3],
+//     [0,4],
+//     [1,4],
+//     [1,5],
+//     [2,5],
+//     [3,4],
+//     [4,5],
+//     [3,6],
+//     [3,7],
+//     [4,7],
+//     [4,8],
+//     [5,8],
+//     [6,7],
+//     [7,8]
+// ]
+// var faces = [
+//     [0,1,4],
+//     [0,3,4],
+//     [1,2,5],
+//     [1,4,5],
+//     [3,4,7],
+//     [3,6,7],
+//     [4,5,8],
+//     [4,7,8]
+// ]
+// var mb = MeshBuilder()
+// for (v in verts) mb.addvertex(v)
+// for (e in edges) mb.addedge(e)
+// for (f in faces) mb.addface(f)
+// var plane = mb.build()
+// var mesh = plane
+
+//--------------------
+//| Torus            |
+//--------------------
+var r=1 
+var a=0.35
+var impl = ImplicitMeshBuilder(
+    fn (x,y,z) (x^2+y^2+z^2+r^2-a^2)^2 - 4*r^2*(x^2+y^2)
+    )
+var torus = impl.build(
+    start=Matrix([1,0,0.5]),
+    stepsize=0.25,
+    maxiterations=400
+    )
+torus.addgrade(1)
+var mesh = torus
+
+// 2. Initialize Substrate object with substrate mesh argument
+var s = Substrate(mesh)
+var origMesh = s.mesh.clone()
+
+// 3. Build particle mesh
+var ptsArr = GenRandomRectangle(
+    1000,
+    xBounds=[-1,1],
+    yBounds=[-1,1],
+    zBounds=[-1,1]
+    )
+var mbb = MeshBuilder()
+for (x in ptsArr) mbb.addvertex(x)
+var particleMesh = mbb.build()
+
+// 4. Initialize Particles object with particle mesh argument
+var p = Particles(particleMesh)
+
+// 5. Project particles onto substrate (Particles object method, Substrate object argument)
+p.project(s)
+
+// 6. Define Force object
+var e1 = Matrix([1,0,0])
+var e2 = Matrix([0,1,0])
+var e3 = Matrix([0,0,1])
+var f = ConstantForce((1*e1))
+
+// 7. Move particles along substrate by applying the force (Particles object method, Substrate and Force object arguments)
+p.moveAll(s, f)
+
+// 8. Invoke ParticlePlotter object
+var pp = ParticlePlotter()
+// pp.plot(p, s, substrateGrade=[2], points=true)
+// pp.plot(p, s, substrateGrade=[2], points=true, projectablePoints=true)
+
+// 9. Locally define loop to get barycentric coordinates of each particle
+// (This will eventually live in a separate Class)
+fn getBaryCoords (ParticlesObj, SubstrateObj) {
+    var n = ParticlesObj.pointDetails.count()
+    var baryCoords = Matrix(3, n)
+    var x, id, vids, v1id, v2id, v3id, v1loc, v2loc, v3loc, v1v2, v1x, vertPrime, Tinv, ll, l
+    for (i in 0...n) {
+        x = ParticlesObj.pointDetails[i]
+        id = x.elemID
+        // print("${i}/${n-1}")
+        // print("  grade: ${x.elemGrade}")
+        if (x.elemGrade == 0) {
+            baryCoords.setcolumn(i, Matrix([1,0,0]))
+        } else if (x.elemGrade == 1) {
+            vids = SubstrateObj.meshConn.ve.rowindices(id)
+            v1id = vids[0]
+            v2id = vids[1]
+            v1loc = SubstrateObj.mesh.vertexmatrix().column(v1id)
+            v2loc = SubstrateObj.mesh.vertexmatrix().column(v2id)
+            v1v2 = v2loc - v1loc
+            v1x = x.loc - v1loc
+            // baryCoords.setcolumn(i, Matrix([v1v2.norm()/v1x.norm(),0,0]))
+            baryCoords.setcolumn(i, Matrix([v1x.norm()/v1v2.norm(),0,0]))
+        } else {
+            // print("--step 1")
+            vids = SubstrateObj.meshConn.vf.rowindices(id)
+            // print("--step 2")
+            v1id = vids[0]
+            // print("--step 3")
+            v2id = vids[1]
+            // print("--step 4")
+            v3id = vids[2]
+            // print("--step 5")
+            v1loc = SubstrateObj.mesh.vertexmatrix().column(v1id)
+            // print("--step 6")
+            v2loc = SubstrateObj.mesh.vertexmatrix().column(v2id)                
+            // print("--step 7")
+            v3loc = SubstrateObj.mesh.vertexmatrix().column(v3id)
+            // print("--step 8")
+            l = CartToBary(x.loc, v1loc, v2loc, v3loc)
+            baryCoords.setcolumn(i, l)
+        }
+    }
+    return baryCoords
+}
+
+// 10. Get barycentric coordinates
+print("calculating bary coords")
+var bc = getBaryCoords(p, s)
+
+// 11. Transform substrate mesh
+// 11.a Stretch
+var stretch = fn (x, xeig=1, yeig=1, zeig=1) (Matrix([[xeig,0,0],[0,yeig,0],[0,0,zeig]])*x)
+// var stretch = fn (x, skew=1) (Matrix([[skew,skew,0],[skew,skew,0],[0,0,1]])*x)
+for (i in 0...s.mesh.count(0)) {
+    var x = s.mesh.vertexmatrix().column(i)
+    s.mesh.vertexmatrix().setcolumn(i, stretch(x, xeig=0.75, yeig=1.5, zeig=1))
+    // s.mesh.vertexmatrix().setcolumn(i, stretch(x, skew=2))
+}
+
+// 11.b Translate
+var transVector = Matrix([3,0,0])
+for (i in 0...s.mesh.count(0)) {
+    s.mesh.vertexmatrix().setcolumn(i, s.mesh.vertexmatrix().column(i) + transVector)
+}
+
+// 12. Compute Cartesian coordinates of transported particles
+// (This loop will also be defined and live within a Class)
+print("calculating cartesian coords")
+var m = bc.dimensions()[0]
+var n = bc.dimensions()[1]
+var cc = Matrix(m,n)
+for (i in 0...n) {
+    print("${i}/${n-1}")
+    var xdetails = p.pointDetails[i]
+    var xloc = xdetails.loc
+    var xgrade = xdetails.elemGrade
+    var xid = xdetails.elemID
+    if (xgrade == 0) {
+        cc.setcolumn(i, s.mesh.vertexmatrix().column(xid))
+    } else if (xgrade == 1) {
+        var vids = s.meshConn.ve.rowindices(xid)
+        var v1id = vids[0]
+        var v2id = vids[1]
+        var v1loc = s.mesh.vertexmatrix().column(v1id)
+        var v2loc = s.mesh.vertexmatrix().column(v2id)
+        cc.setcolumn(i, v1loc + bc.column(i)[0]*(v2loc - v1loc))
+    } else {
+        var vids = s.meshConn.vf.rowindices(xid)
+        var v1id = vids[0]
+        var v2id = vids[1]
+        var v3id = vids[2]
+        var v1loc = s.mesh.vertexmatrix().column(v1id)
+        var v2loc = s.mesh.vertexmatrix().column(v2id)
+        var v3loc = s.mesh.vertexmatrix().column(v3id)
+        cc.setcolumn(i, BaryToCart(bc.column(i), v1loc, v2loc, v3loc))
+    }
+}
+for (i in 0...p.points.vertexmatrix().dimensions()[1]) {
+    p.points.vertexmatrix().setcolumn(i, cc.column(i))
+}
+
+// 13. Compute arrays of particles lying on vertices, edges, or faces, respectively
+var grade0Arr = []
+var grade1Arr = []
+var grade2Arr = []
+for (i in 0...p.pointDetails.count()) {
+    var x = p.pointDetails[i]
+    if (x.elemGrade == 0) {
+        grade0Arr.append(p.points.vertexposition(i))
+    } else if (x.elemGrade == 1) {
+        grade1Arr.append(p.points.vertexposition(i))
+    } else {
+        grade2Arr.append(p.points.vertexposition(i))
+    }
+}
+
+// 14. Plot individual graded particles on transformed substrate
+// Vertices: red, edges: green, faces: blue
+var plotToggle = false
+if (plotToggle) {
+    if (grade0Arr.count() > 0) {
+        var mbb = MeshBuilder()
+        for (x in grade0Arr) mbb.addvertex(x)
+        var grade0mesh = mbb.build()
+
+        var g = Graphics()
+        g += plotmesh(s.mesh, grade=[2])
+        g += plotmesh(grade0mesh, grade=[0], color=[255,0,0])
+        Show(g)
+    }
+
+    if (grade1Arr.count() > 0) {
+        var mbb = MeshBuilder()
+        for (x in grade1Arr) mbb.addvertex(x)
+        var grade1mesh = mbb.build()
+
+        var g = Graphics()
+        g += plotmesh(s.mesh, grade=[2])
+        g += plotmesh(grade1mesh, grade=[0], color=[0,255,0])
+        Show(g)
+    }
+
+    if (grade2Arr.count() > 0) {
+        var mbb = MeshBuilder()
+        for (x in grade2Arr) mbb.addvertex(x)
+        var grade2mesh = mbb.build()
+
+        var g = Graphics()
+        g += plotmesh(s.mesh, grade=[2])
+        g += plotmesh(grade2mesh, grade=[0], color=[0,0,255])
+        Show(g)
+    }
+}
+
+// 15. Plot original substrate and projected particles alongside transformed substrate and transported particles
+var g = Graphics()
+g += plotmesh(origMesh, grade=[2])
+g += plotmesh(s.mesh, grade=[2])
+g += plotmesh(p.projectedPoints, grade=[0,2], color=[255,0,0])
+g += plotmesh(p.points, grade=[0,2], color=[0,255,0])
+Show(g)

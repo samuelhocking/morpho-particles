@@ -34,4 +34,4 @@ p.moveAllLoop(s, f, 1000, stepsize=0.00001, stepQuiet=true, loopQuiet=true)
 var pp = ParticlePlotter()
 
 // 9. Plot
-pp.plot(p, s, substrateGrade=[2], movedPoints=true)
+pp.plot(p, s, substrateGrade=[2], points=true)

@@ -37,6 +37,18 @@ fn GenParametrizedLine(function, tStart=0, tEnd=1, numPts=10) {
     return ptsArr
 }
 
+fn GenParametrizedRectangle(tFunction, sFunction, tStart=0, tEnd=1, sStart=0, sEnd=1, numTPts=10, numSPts=10) {
+    var tFunc = tFunction
+    var sFunc = sFunction
+    var ptsArr = []
+    for (t in 0...numTPts) {
+        for (s in 0...numSPts) {
+            ptsArr.append(tFunc(tStart + t*(tEnd-tStart)/(numTPts-1)) + sFunc(sStart + s*(sEnd-sStart)/(numSPts-1)))
+        }
+    }
+    return ptsArr
+}
+
 fn GenParametrizedBall(r=1, usteps=5, vsteps=5, wsteps=5) {
     // u: steps along longitudinal arc
     // v: steps along latitudinal arc
