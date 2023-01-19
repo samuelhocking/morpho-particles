@@ -4,47 +4,167 @@
 import optimize
 
 class ParticleOptimizer is ShapeOptimizer {
-    init(problem, particlesObj, substrateObj) {
-        super.init(problem, particlesObj.points)
+    init(particleProblem, particlesObj, substrateObj) {
+        super.init(particleProblem, particlesObj.points)
         self.particlesObj = particlesObj
         self.substrateObj = substrateObj
     }
 
     /* Perform relaxation at fixed stepsize */
-    prelax(n) {
+    relax(n) {
         if (self.energy.count()==0) self.energy.append(self.totalenergy())
-        print("initial energy ${self.energy}")
 
         for (i in 0...n) {
-        self.force = self.totalforcewithconstraints()
-        self.pstep(self.stepsize)
-        self.energy.append(self.totalenergy()) // Track the total energy
-        self.report(i)
-        if (self.hasconverged()) break
+            self.force = self.totalforcewithconstraints()
+            self.step(self.stepsize)
+            self.energy.append(self.totalenergy()) // Track the total energy
+            self.report(i)
+            if (self.hasconverged()) break
         }
         return self.energy
     }
 
     /* Take a step */
-    pstep(stepsize) {
-        var target = self.gettarget()
-        // print target
+    step(stepsize) {
+        // var target = self.gettarget()
         var frc = self.force*stepsize*(-1) // Use the force
-        // print frc.transpose()
-
         if (!frc) return
 
-        var movement = self.particlesObj.calcMovement(self.substrateObj, frc)
-
-        // target.acc(1, movement.locDelta)
-        self.particlesObj.points.setvertexmatrix(movement.pointLocs)
-        self.particlesObj.pointLocs = target
-        self.particlesObj.pointDetails = movement.pointDetails
-
-        // self.initlocalconstraints()
-        // self.reprojectlocalconstraints() // Reproject onto local constraints
-
-        // self.reprojectconstraints() // Push back onto constraints
+        self.particlesObj.points.vertexmatrix().acc(1,frc)
+        self.particlesObj.projectPoints(self.substrateObj)
+        self.settarget(self.particlesObj.points.vertexmatrix())
     }
 }
 
+class SubstrateOptimizer is ShapeOptimizer {
+    init(particleProblem, substrateProblem, particlesObj, substrateObj) {
+        super.init(substrateProblem, substrateObj.mesh)
+        self.particleProblem = particleProblem
+        self.substrateProblem = substrateProblem
+        self.particlesObj = particlesObj
+        self.substrateObj = substrateObj
+    }
+
+    getSubstrateVertexGrad(stepsize=0.01) {
+        var I = Eye(3)
+
+        var substrateVertexGrad = Matrix(3, self.substrateObj.mesh.count(0))
+        for (i in 0...self.substrateObj.mesh.count(0)) {
+            var grads = []
+            for (j in 0..2) {
+                self.substrateObj.mesh.vertexmatrix().setcolumn(i, self.substrateObj.mesh.vertexmatrix().column(i) + stepsize*I.column(j))
+                self.particlesObj.updateCartesianCoords(self.substrateObj)
+                var fplus = self.totalenergy()
+
+                self.substrateObj.mesh.vertexmatrix().setcolumn(i, self.substrateObj.mesh.vertexmatrix().column(i) - 2*stepsize*I.column(j))
+                self.particlesObj.updateCartesianCoords(self.substrateObj)
+                var fminus = self.totalenergy()
+
+                self.substrateObj.mesh.vertexmatrix().setcolumn(i, self.substrateObj.mesh.vertexmatrix().column(i) + stepsize*I.column(j))
+                self.particlesObj.updateCartesianCoords(self.substrateObj)
+
+                grads.append((fplus-fminus)/(2*stepsize))
+            }
+            // print("done: ${i}/${p.numPoints-1}")
+            substrateVertexGrad.setcolumn(i, Matrix(grads))
+        }
+        return substrateVertexGrad
+    }
+
+    /* Perform relaxation at fixed stepsize */
+    relax(n) {
+        if (self.energy.count()==0) self.energy.append(self.totalenergy())
+
+        for (i in 0...n) {
+            self.force = self.totalforcewithconstraints() + self.getSubstrateVertexGrad()
+            self.step(self.stepsize)
+            self.energy.append(self.totalenergy()) // Track the total energy
+            self.report(i)
+            if (self.hasconverged()) break
+        }
+        return self.energy
+    }
+
+    /* Take a step */
+    step(stepsize) {
+        var target = self.gettarget()
+        var frc = self.force // Use the force
+
+        if (!frc) return
+
+        target.acc(-stepsize, frc) // Take a step
+
+        self.initlocalconstraints()
+        self.reprojectlocalconstraints() // Reproject onto local constraints
+        self.reprojectconstraints() // Push back onto constraints
+        self.settarget(self.substrateObj.mesh.vertexmatrix())
+    }
+}
+
+class JointOptimizer is ShapeOptimizer {
+    init(particleProblem, substrateProblem, particlesObj, substrateObj) {
+        self.particleProblem = particleProblem
+        self.substrateObj = substrateProblem
+        self.particlesObj = particlesObj
+        self.substrateObj = substrateObj
+        self.particleOpt = ParticleOptimizer(particleProblem, particlesObj, substrateObj)
+        self.substrateOpt = SubstrateOptimizer(particleProblem, substrateProblem, particlesObj, substrateObj)
+        self.energy = [] // History of energies
+        self.etol = 1e-8 // Energy convergence criterion
+        self.ctol = 1e-10 // Constraint satisfaction criterion
+        self.particleOpt.etol = self.etol
+        self.particleOpt.ctol = self.ctol
+        self.substrateOpt.etol = self.etol
+        self.substrateOpt.ctol = self.ctol
+        self.quiet = false
+        self.particleOpt.quiet = true
+        self.substrateOpt.quiet = true
+    }
+
+    relax(n) {
+        if (self.particleOpt.energy.count()==0) self.particleOpt.energy.append(self.particleOpt.totalenergy())
+        if (self.substrateOpt.energy.count()==0) self.substrateOpt.energy.append(self.substrateOpt.totalenergy())
+        if (self.energy.count()==0) self.energy.append(self.particleOpt.totalenergy()+self.substrateOpt.totalenergy())
+        for (i in 0...n) {
+            self.particleOpt.force = self.particleOpt.totalforcewithconstraints()
+            self.substrateOpt.force = self.substrateOpt.totalforcewithconstraints() + self.substrateOpt.getSubstrateVertexGrad()
+            self.substrateOpt.step(self.substrateOpt.stepsize)
+            self.substrateObj.updateCoords()
+            self.particleOpt.step(self.particleOpt.stepsize)
+            self.substrateOpt.settarget(self.substrateObj.mesh.vertexmatrix())
+            self.particleOpt.settarget(self.particlesObj.points.vertexmatrix())
+            self.particleOpt.energy.append(self.particleOpt.totalenergy())
+            self.substrateOpt.energy.append(self.substrateOpt.totalenergy())
+            self.energy.append(self.particleOpt.totalenergy()+self.substrateOpt.totalenergy())
+            self.report(i)
+            // print(" particle  force norm  : ${self.particleOpt.totalforcewithconstraints().norm()}")
+            // print(" substrate force norm  : ${self.substrateOpt.totalforcewithconstraints().norm()}")
+            // print(" substrate vertex norm : ${self.substrateOpt.getSubstrateVertexGrad().norm()}")
+            if (self.hasconverged()) break
+        }
+    }
+
+    hasconverged() {
+        var energy = self.energy
+        if (energy.count()>1) {
+            var de = abs(energy[-1]-energy[-2])
+            if (abs(energy[-1])<self.etol || de/abs(energy[-1])<self.etol) return true
+        }
+        return false
+    }
+
+    report(iter) {
+        if (self.energy.count()<2) return
+        var de = abs(self.energy[-1]-self.energy[-2])
+        var sde = abs(self.substrateOpt.energy[-1]-self.substrateOpt.energy[-2])
+        var pde = abs(self.particleOpt.energy[-1]-self.particleOpt.energy[-2])
+        if (!self.quiet) {
+            print(
+                "Iteration ${iter}.
+        Total     | Energy: ${self.energy[-1]} delta E: ${de}
+        Substrate | Energy: ${self.substrateOpt.energy[-1]} delta E: ${sde} stepsize: ${self.substrateOpt.stepsize}
+        Particles | Energy: ${self.particleOpt.energy[-1]} delta E: ${pde} stepsize: ${self.particleOpt.stepsize}"
+            )
+        }
+    }
+}

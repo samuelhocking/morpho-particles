@@ -9,6 +9,7 @@ import constants
 import implicitmesh
 import "DictlikeSetOps.morpho"
 import "LinAlgTools.morpho"
+import "BaryTools.morpho"
 
 // get rotated list (same cyclic order, but different starting point) given delta (number of spots to advance in original list cycle)
 fn rotateList(list, delta) {return [list[mod(0+delta,3)], list[mod(1+delta,3)], list[mod(2+delta,3)]]}
@@ -902,6 +903,9 @@ class ParticleMover{
         var result = Object()
         var unit_vx_proj = vx_proj/vx_proj.norm()
         var tgtEdgeIdx = closestFace.edgeIDtoIndexDict[tgtEdgeID]
+        // print("closestFace.edgeVectors")
+        // print(closestFace.edgeVectors)
+        // print("tgtEdgeIdx: ${tgtEdgeIdx}")
         var totalEdgeLengths = closestFace.edgeVectors[0].norm() + closestFace.edgeVectors[1].norm() + closestFace.edgeVectors[2].norm()
         var long_vx_proj = totalEdgeLengths*unit_vx_proj
         var tgtEdgeVect = closestFace.edgeVectors[tgtEdgeIdx]
@@ -1203,33 +1207,106 @@ class Substrate {
         self.starProjector = StarProjector(self.starHelper)
         self.particleMover = ParticleMover(self.faceHelper, self.starProjector)
     }
+
+    updateTopo () {
+        self.meshConn = MeshConnectivity(self.mesh)
+        self.vertexHelper = VertexHelper(self.meshConn)
+        self.kdHelper = KDHelper(self.mesh)
+        self.faceKD = FaceKDHelper(self.meshConn)
+        self.edgeKD = EdgeKDHelper(self.meshConn)
+        self.faceHelper = FaceHelper(self.faceKD, self.edgeKD)
+        self.starHelper = StarHelper(self.vertexHelper, self.faceHelper)
+        self.starProjector = StarProjector(self.starHelper)
+        self.particleMover = ParticleMover(self.faceHelper, self.starProjector)
+    }
+
+    updateCoords () {
+        self.kdHelper = KDHelper(self.mesh)
+        self.faceHelper = FaceHelper(self.faceKD, self.edgeKD)
+        self.starHelper = StarHelper(self.vertexHelper, self.faceHelper)
+        self.starProjector = StarProjector(self.starHelper)
+        self.particleMover = ParticleMover(self.faceHelper, self.starProjector)        
+    }
 }
 
 class Particles {
     init (particlesMesh) {
         self.numPoints = particlesMesh.count(0)
         self.projectablePoints = particlesMesh.clone()
-        self.projectablePointLocs = particlesMesh.vertexmatrix().clone()
         self.projectedPoints = nil
-        self.projectedPointLocs = nil
         self.projectedPointDetails = nil
         self.movedPoints = nil
-        self.movedPointLocs = nil
         self.movedPointDetails = nil
         self.points = nil
-        self.pointLocs = nil
         self.pointDetails = nil
+        self.baryCoords = nil
     }
 
-    resetPoints(particlesMesh) {
+    resetPoints (particlesMesh) {
         self.init(particlesMesh)
+    }
+
+    projectPoints (SubstrateObj) {
+        var deltaMatrix = Matrix(3, self.numPoints)
+        var projectedPoints = self.points.clone()
+        var projectedPointDetails = []
+        for (i in 0...self.numPoints) {
+            var x = projectedPoints.vertexmatrix().column(i)
+            var p_c = SubstrateObj.kdHelper.tree.nearest(x).id
+            var projPt = SubstrateObj.starProjector.getClosestMeshPt(x=x, centerIndex=p_c)
+            // starProjector return format:
+            /*
+            var result = Object()
+            result.loc = x_fin_proj
+            result.elemGrade = elemGrade
+            result.elemID = elemID
+            return result
+            */
+            projectedPointDetails.append(projPt)
+            projectedPoints.vertexmatrix().setcolumn(i, projPt.loc)
+            var delta = projPt.loc-x
+            deltaMatrix.setcolumn(i, delta)
+            // print("delta (i=${i}): ${(projPt.loc-x).norm()}")
+        }
+        self.projectedPoints = projectedPoints
+        self.projectedPointDetails = projectedPointDetails
+        self.points = self.projectedPoints.clone()
+        self.pointDetails = self.projectedPointDetails.clone()
+        self.baryCoords = self.getBaryCoords(SubstrateObj)
+        // return deltaMatrix
     }
 
     project (SubstrateObj) {
         var projectedPoints = self.projectablePoints.clone()
         var projectedPointDetails = []
         for (i in 0...self.numPoints) {
-            var x = self.projectablePointLocs.column(i)
+            var x = self.projectablePoints.vertexmatrix().column(i)
+            var p_c = SubstrateObj.kdHelper.tree.nearest(x).id
+            var projPt = SubstrateObj.starProjector.getClosestMeshPt(x=x, centerIndex=p_c)
+            // starProjector return format:
+            /*
+            var result = Object()
+            result.loc = x_fin_proj
+            result.elemGrade = elemGrade
+            result.elemID = elemID
+            return result
+            */
+            projectedPointDetails.append(projPt)
+            projectedPoints.vertexmatrix().setcolumn(i, projPt.loc)
+            // print("delta (i=${i}): ${(projPt.loc-x).norm()}")
+        }
+        self.projectedPoints = projectedPoints
+        self.projectedPointDetails = projectedPointDetails
+        self.points = self.projectedPoints.clone()
+        self.pointDetails = self.projectedPointDetails.clone()
+        self.baryCoords = self.getBaryCoords(SubstrateObj)
+    }
+
+    hypoProject (SubstrateObj) {
+        var projectedPoints = self.projectablePoints.clone()
+        var projectedPointDetails = []
+        for (i in 0...self.numPoints) {
+            var x = self.projectablePoints.vertexmatrix().column(i)
             var p_c = SubstrateObj.kdHelper.tree.nearest(x).id
             var projPt = SubstrateObj.starProjector.getClosestMeshPt(x=x, centerIndex=p_c)
             // starProjector return format:
@@ -1243,19 +1320,145 @@ class Particles {
             projectedPointDetails.append(projPt)
             projectedPoints.vertexmatrix().setcolumn(i, projPt.loc)
         }
-        self.projectedPoints = projectedPoints
-        self.projectedPointLocs = projectedPoints.vertexmatrix()
-        self.projectedPointDetails = projectedPointDetails
-        self.points = self.projectedPoints.clone()
-        self.pointLocs = self.projectedPointLocs.clone()
-        self.pointDetails = self.projectedPointDetails.clone()
+        var returnObj = Object()
+        returnObj.projectedPoints = projectedPoints        
+        returnObj.projectedPointDetails = projectedPointDetails
+        return returnObj
     }
 
+    findDupes(mesh) {
+        var dupes = []
+        for (i in 0...mesh.count(0)) {
+            var x = mesh.vertexposition(i)
+            for (j in i+1...mesh.count(0)) {
+                var delta = x - mesh.vertexposition(j)
+                // print("${i},${j} :   ${delta.norm()}")
+                if (delta.norm() < 1e-4) {
+                    // dupes.setcolumn(i,Matrix([1]))
+                    dupes.append(i)
+                    break
+                }
+            }
+        }
+        return dupes        
+    }
+
+    cleanProject(SubstrateObj, maxPoints=nil, verbose=false) {
+        var hypoObj = self.hypoProject(SubstrateObj)
+        var hypoPoints = hypoObj.projectedPoints
+        var hypoPointDetails = hypoObj.projectedPointDetails
+        var dupeIndices = self.findDupes(hypoPoints)
+        var keepIndices = [0...hypoPoints.count(0)]
+        if (dupeIndices.count() > 0 ) {
+            for (i in dupeIndices) {
+                keepIndices.remove(i)
+            }
+        }
+        var n, finalKeepIndices
+        if (maxPoints == nil) {
+            n = keepIndices.count()
+            finalKeepIndices = keepIndices.clone()
+        } else {
+            n = min(keepIndices.count(), maxPoints)
+            finalKeepIndices = keepIndices[0...n]
+        }
+        var newProjectablePointsMatrix = Matrix(3, n)
+        var newProjectedPointsMatrix = Matrix(3, n)
+        var newProjectedPointDetails = []
+        for (i in 0...n) {
+            newProjectablePointsMatrix.setcolumn(i, self.projectablePoints.vertexposition(finalKeepIndices[i]))
+            newProjectedPointsMatrix.setcolumn(i, hypoPoints.vertexposition(finalKeepIndices[i]))
+            newProjectedPointDetails.append(hypoPointDetails[finalKeepIndices[i]])
+        }
+        var mb = MeshBuilder()
+        for (i in 0...n) {mb.addvertex(newProjectablePointsMatrix.column(i))}
+        self.projectablePoints = mb.build()
+        self.numPoints = n
+
+        var mb = MeshBuilder()
+        for (i in 0...n) {mb.addvertex(newProjectedPointsMatrix.column(i))}
+        self.projectedPoints = mb.build()
+
+        self.projectedPointDetails = newProjectedPointDetails
+        self.points = self.projectedPoints.clone()
+        self.pointDetails = self.projectedPointDetails.clone()
+        self.baryCoords = self.getBaryCoords(SubstrateObj)
+        if (verbose == true) {
+            print("-- clean projection complete --")
+            print("dupes removed    : ${dupeIndices.count()}")
+            print("remaining points : ${n}")
+        }     
+    }
+
+    getBaryCoords (SubstrateObj) {
+        var baryCoords = Matrix(3, self.numPoints)
+        var x, id
+        for (i in 0...self.numPoints) {
+            x = self.pointDetails[i]
+            id = x.elemID
+            if (x.elemGrade == 0) {
+                baryCoords.setcolumn(i, Matrix([1,0,0]))
+            } else if (x.elemGrade == 1) {
+                var vids, v1loc, v2loc, v1v2, v1x
+                vids = SubstrateObj.meshConn.ve.rowindices(id)
+                v1loc = SubstrateObj.mesh.vertexmatrix().column(vids[0])
+                v2loc = SubstrateObj.mesh.vertexmatrix().column(vids[1])
+                v1v2 = v2loc - v1loc
+                v1x = x.loc - v1loc
+                baryCoords.setcolumn(i, Matrix([v1x.norm()/v1v2.norm(),0,0]))
+            } else {
+                var vids, v1loc, v2loc, v3loc
+                vids = SubstrateObj.meshConn.vf.rowindices(id)
+                v1loc = SubstrateObj.mesh.vertexmatrix().column(vids[0])
+                v2loc = SubstrateObj.mesh.vertexmatrix().column(vids[1])
+                v3loc = SubstrateObj.mesh.vertexmatrix().column(vids[2])
+                baryCoords.setcolumn(i, CartToBary(x.loc, v1loc, v2loc, v3loc))
+            }
+        }
+        return baryCoords        
+    }
+
+    getCartesianCoords (SubstrateObj) {
+        var cartesianCoords = Matrix(3, self.numPoints)
+        for (i in 0...self.numPoints) {
+            var xdetails = self.pointDetails[i]
+            var xloc = xdetails.loc
+            var xgrade = xdetails.elemGrade
+            var xid = xdetails.elemID
+            if (xgrade == 0) {
+                cartesianCoords.setcolumn(i, SubstrateObj.mesh.vertexmatrix().column(xid))
+            } else if (xgrade == 1) {
+                var vids = SubstrateObj.meshConn.ve.rowindices(xid)
+                var v1loc = SubstrateObj.mesh.vertexmatrix().column(vids[0])
+                var v2loc = SubstrateObj.mesh.vertexmatrix().column(vids[1])
+                cartesianCoords.setcolumn(i, v1loc + self.baryCoords.column(i)[0]*(v2loc - v1loc))
+            } else {
+                var vids = SubstrateObj.meshConn.vf.rowindices(xid)
+                var v1loc = SubstrateObj.mesh.vertexmatrix().column(vids[0])
+                var v2loc = SubstrateObj.mesh.vertexmatrix().column(vids[1])
+                var v3loc = SubstrateObj.mesh.vertexmatrix().column(vids[2])
+                cartesianCoords.setcolumn(i, BaryToCart(self.baryCoords.column(i), v1loc, v2loc, v3loc))
+            }
+        }
+        return cartesianCoords
+    }
+
+    updateBaryCoords (SubstrateObj) {
+        self.baryCoords = self.getBaryCoords(SubstrateObj)
+    }
+
+    updateCartesianCoords (SubstrateObj) {
+        var cc = self.getCartesianCoords(SubstrateObj)
+        for (i in 0...self.points.vertexmatrix().dimensions()[1]) {
+            self.points.vertexmatrix().setcolumn(i, cc.column(i))
+        }
+    }
+
+    // for use with ParticleOptimizer
     calcMovement (SubstrateObj, force, stepsize=1, quiet=true) {
         var initialPointsMatrix = self.points.vertexmatrix().clone()
         var movedPointsMatrix = initialPointsMatrix.clone()
         var movedPointDetails = []
-        // var forceMatrix = force.getForceMatrix(self.pointLocs) // this will need to get tweaked later to play with Functionals
         var forceMatrix = force
         for (i in 0...forceMatrix.dimensions()[1]) {
             var vector = stepsize*forceMatrix.column(i)
@@ -1271,7 +1474,7 @@ class Particles {
                 print "Moving:  ${i+1}/${self.numPoints}"
                 print "dir:     ${[dir[0],dir[1],dir[2]]}"
                 print "len:     ${len}"
-                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "raw pt:  ${[self.projectablePoints.vertexmatrix().column(i)[0],self.projectablePoints.vertexmatrix().column(i)[1],self.projectablePoints.vertexmatrix().column(i)[2]]}"
                 print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
             }
             var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
@@ -1289,17 +1492,17 @@ class Particles {
             movedPointsMatrix.setcolumn(i, movedPt.loc)
         }
         var returnObj = Object()
-        // location delta
         returnObj.locDelta = movedPointsMatrix - initialPointsMatrix
-        returnObj.pointLocs = movedPointsMatrix
+        returnObj.pointsMatrix = movedPointsMatrix
         returnObj.pointDetails = movedPointDetails
         return returnObj
     }
 
+    // for use with non-optimizer Force objects
     moveAll (SubstrateObj, force, stepsize=1, quiet=true) {
         var movedPoints = self.projectedPoints.clone()
         var movedPointDetails = []
-        var forceMatrix = force.getForceMatrix(self.pointLocs) // this will need to get tweaked later to play with Functionals
+        var forceMatrix = force.getForceMatrix(self.points.vertexmatrix())
         for (i in 0...forceMatrix.dimensions()[1]) {
             var vector = stepsize*forceMatrix.column(i)
             var len = vector.norm()
@@ -1314,7 +1517,7 @@ class Particles {
                 print "Moving:  ${i+1}/${self.numPoints}"
                 print "dir:     ${[dir[0],dir[1],dir[2]]}"
                 print "len:     ${len}"
-                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "raw pt:  ${[self.projectablePoints.vertexmatrix().column(i)[0],self.projectablePoints.vertexmatrix().column(i)[1],self.projectablePoints.vertexmatrix().column(i)[2]]}"
                 print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
             }
             var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
@@ -1332,10 +1535,8 @@ class Particles {
             movedPoints.vertexmatrix().setcolumn(i, movedPt.loc)
         }
         self.movedPoints = movedPoints
-        self.movedPointLocs = movedPoints.vertexmatrix()
         self.movedPointDetails = movedPointDetails
         self.points = self.movedPoints.clone()
-        self.pointLocs = self.movedPointLocs.clone()
         self.pointDetails = self.movedPointDetails.clone()
     }
 
@@ -1352,7 +1553,7 @@ class Particles {
 
     moveOnebyOne (SubstrateObj, force, stepsize=1, quiet=true) {
         var points = self.points
-        var pointLocs = self.pointLocs
+        var pointLocs = self.points.vertexmatrix()
         var pointDetails = self.pointDetails
         for (i in 0...self.numPoints) {
             var vector = stepsize*force.totalForce(pointLocs, i)
@@ -1368,7 +1569,7 @@ class Particles {
                 print "Moving:  ${i+1}/${self.numPoints}"
                 print "dir:     ${[dir[0],dir[1],dir[2]]}"
                 print "len:     ${len}"
-                print "raw pt:  ${[self.projectablePointLocs.column(i)[0],self.projectablePointLocs.column(i)[1],self.projectablePointLocs.column(i)[2]]}"
+                print "raw pt:  ${[self.projectablePoints.vertexmatrix().column(i)[0],self.projectablePoints.vertexmatrix().column(i)[1],self.projectablePoints.vertexmatrix().column(i)[2]]}"
                 print "proj pt: ${[x.loc[0],x.loc[1],x.loc[2]]}"         
             }
             var movedPt = SubstrateObj.particleMover.movementLoop(x, dir, len, quiet=quiet)
@@ -1387,12 +1588,11 @@ class Particles {
             pointDetails[i] = movedPt
         }
         self.points = points
-        self.pointLocs = pointLocs
         self.pointDetails = pointDetails
         self.movedPoints = points
-        self.movedPointLocs = pointLocs
         self.movedPointDetails = pointDetails
     }
+
     moveOnebyOneLoop (SubstrateObj, force, steps, stepsize=1, stepQuiet=true, loopQuiet=true) {
         for (i in 1..steps) {
             if (loopQuiet == true) {
