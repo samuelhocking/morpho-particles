@@ -77,24 +77,30 @@ fn randSign() {
     }
 }
 
-fn GenRandomSphere(numPts, r=1) {
+fn GenRandomSphere(numPts, r) {
+    // convert to spherical coordinates... duh
     var ptsArr = []
     for (i in 1..numPts) {
-        var x = min(max(-r+2*r*random(),-r),r)
-        var y = min(max(-r+2*r*random(),-r),r)
-        var z = min(max(randSign()*sqrt(r^2 -(x^2+y^2)),-r),r)
+        var theta = 2*Pi*random()
+        var phi = Pi*random()
+        var x = r*sin(phi)*cos(theta)
+        var y = r*sin(phi)*sin(theta)
+        var z = r*cos(phi)
         ptsArr.append(Matrix([x,y,z]))
     }
     return ptsArr
 }
 
-fn GenRandomBall(numPts, r=1) {
+fn GenRandomBall(numPts, r) {
+    // convert to spherical coordinates... duh
     var ptsArr = []
     for (i in 1..numPts) {
-        var r = r*random()
-        var x = min(max(-r+2*r*random(),-r),r)
-        var y = min(max(-r+2*r*random(),-r),r)
-        var z = min(max(randSign()*sqrt(r^2 -(x^2+y^2)),-r),r)
+        var rad = r*random()
+        var theta = 2*Pi*random()
+        var phi = Pi*random()
+        var x = rad*sin(phi)*cos(theta)
+        var y = rad*sin(phi)*sin(theta)
+        var z = rad*cos(phi)
         ptsArr.append(Matrix([x,y,z]))        
     }
     return ptsArr
