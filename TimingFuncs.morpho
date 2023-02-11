@@ -1,0 +1,78 @@
+// TimingFuncs
+// By: Sam Hocking
+// Requires: TakeTime.py
+//           Remove.py
+//           GetDTDiff.py
+
+    fn morphoClock(func) {
+        var start = clock()
+        print start
+        var out = func
+        for (i in 1..100000) { sin(0) }
+        var end = clock()
+        print end
+        var result = Object()
+        result.elapsed = end-start
+        result.out = out
+        return result
+    }
+
+    fn takeTime(filename) {
+        system("python TakeTime.py ${filename}")
+        var f = File(filename)
+        var timeStr = f.readline()
+        f.close()
+        system("python Remove.py")
+        return timeStr
+    }
+
+    fn getDTDiff(startStr, endStr, filename) {
+        system("python GetDTDiff.py ${startStr} ${endStr}")
+        var f = File(filename)
+        var elapsed = Float(f.readline())
+        f.close()
+        system("python Remove.py")
+        return elapsed
+    }
+
+    fn pythonTime(func) {
+        var filename = "comm.txt"
+
+        var startStr = takeTime(filename)
+        print startStr
+
+        var out = func
+
+        var endStr = takeTime(filename)
+        print endStr
+
+        var elapsed = getDTDiff(startStr, endStr, filename)
+        var result = Object()
+        result.elapsed = elapsed
+        result.out = out
+        return result    
+    }
+
+    fn pythonTime2(func) {
+        var filename = "comm.txt"
+        var startStr, out, endStr, elapsed, result
+        var i = 1
+        while (i <= 4) {
+            if (i == 1) {
+                startStr = takeTime(filename)
+                print startStr
+            } else if (i == 2) {
+                out = func
+            } else if (i == 3) {
+                endStr = takeTime(filename)
+                print endStr
+            } else if (i == 4) {
+                elapsed = getDTDiff(startStr, endStr, filename)
+            }
+            i += 1
+        }
+        var result = Object()
+        result.elapsed = elapsed
+        result.out = out
+        return result         
+    }
