@@ -1606,22 +1606,31 @@ class Particles {
 }
 
 class ParticlePlotter{
-    plot(ParticlesObj, SubstrateObj, substrateGrade=nil, projectablePoints=false, projectedPoints=false, points=false, quiet=false) {
+    plot(ParticlesObj, SubstrateObj, substrateGrade=nil, projectablePoints=false, projectedPoints=false, points=false, quiet=false, particleRad=0.03) {
         if (substrateGrade == nil) {
             var substrateGrade = [2]
         }
         var gMesh = plotmesh(SubstrateObj.mesh, grade=substrateGrade)
         var gCombined = gMesh
         if (projectablePoints == true) {
-            var gProjectable = plotmesh(ParticlesObj.projectablePoints, grade=[0], color=[255,0,0])              
+            var gProjectable = Graphics()
+            for (i in 0...ParticlesObj.projectablePoints.count(0)) {
+                gProjectable.display(Sphere(ParticlesObj.projectablePoints.vertexposition(i),particleRad, color=[255,0,0]))
+            }          
             gCombined += gProjectable.clone()
         }
         if (projectedPoints == true) {
-            var gProjected = plotmesh(ParticlesObj.projectedPoints, grade=[0], color=[0,0,255])              
+            var gProjected = Graphics()
+            for (i in 0...ParticlesObj.projectedPoints.count(0)) {
+                gProjected.display(Sphere(ParticlesObj.projectedPoints.vertexposition(i),particleRad), color=[0,0,255])
+            }          
             gCombined += gProjected.clone()
         }
         if (points == true) {        
-            var gMoved = plotmesh(ParticlesObj.points, grade=[0], color=[0,255,0])              
+            var gMoved = Graphics()
+            for (i in 0...ParticlesObj.points.count(0)) {
+                gMoved.display(Sphere(ParticlesObj.points.vertexposition(i),particleRad, color=[0,255,0]))
+            }          
             gCombined += gMoved.clone()
         }
         Show(gCombined)

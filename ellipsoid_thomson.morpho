@@ -10,11 +10,8 @@ import "ParticleOptimizer.morpho"
 import "LinAlgTools.morpho"
 
 // 1. Build substrate mesh
-// var mesh = Mesh("sphere_icosa_r_1_vol_4.18879_42_vertices.mesh")
-var mesh = Mesh("sphere_icosa_r_1_vol_4.18879_162_vertices.mesh")
-// var mesh = Mesh("sphere_icosa_r_1_vol_4.18879_642_vertices.mesh")
-// var mesh = Mesh("sphere_icosa_r_1_vol_4.18879_2562_vertices.mesh")
-// var mesh = Mesh("sphere_icosa_r_1_vol_4.18879_10242_vertices.mesh")
+var nverts = 162 // options: 42, 162, 642, 2562, 10242
+var mesh = Mesh("./meshes/sphere_icosa_r_1_vol_4.18879_${nverts}_vertices.mesh")
 var a = 2
 var b = 1
 var c = 1
@@ -31,8 +28,8 @@ mesh.setvertexmatrix(M*mesh.vertexmatrix())
 var s = Substrate(mesh)
 
 // 3. Build particle mesh
-var Np = 500 // Number of particles
-var ptsArr = GenRandomSphere(Np, r=4)
+var Np = 800 // Number of particles
+var ptsArr = GenRandomSphere(2*Np, 1.05*a)
 var mbb = MeshBuilder()
 for (x in ptsArr) mbb.addvertex(x)
 var particleMesh = mbb.build()
@@ -42,7 +39,7 @@ var p = Particles(particleMesh)
 
 // 5. Project particles onto substrate (Particles object method, Substrate object argument)
 // p.project(s)
-p.cleanProject(s, maxPoints=100, verbose=true)
+p.cleanProject(s, maxPoints=Np, verbose=true)
 
 var d = p.findDupes(p.points)
 print("\n")
@@ -55,8 +52,8 @@ var ppot = PairwisePotential(fn (r) 1/r, fn (r) -1/r^2)
 pproblem.addenergy(ppot, prefactor=1)
 
 var popt = ParticleOptimizer(pproblem, p, s)
-popt.stepsize=0.001
-popt.relax(2000)
+popt.stepsize=0.000005
+popt.relax(10000)
 
 // 8. Invoke ParticlePlotter object
 var pp = ParticlePlotter()
@@ -70,6 +67,13 @@ sproblem.addconstraint(svol)
 var sopt = SubstrateOptimizer(pproblem, sproblem, p, s)
 print("substrate energy: ${sopt.totalenergy()}")
 
+p.points.save("./meshes/a${a}_b${b}_c${c}_Np${Np}_sverts${nverts}_thomson.mesh")
+
 // 9. Plot
 pp.plot(p, s, substrateGrade=[2], points=true)
+
+var sproblem2 = OptimizationProblem(s.mesh)
+sproblem2.addenergy(svol)
+var sopt2 = SubstrateOptimizer(pproblem, sproblem2, p, s)
+print("substrate vol: ${sopt2.totalenergy()}")
 

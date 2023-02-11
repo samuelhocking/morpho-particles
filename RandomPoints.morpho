@@ -78,7 +78,6 @@ fn randSign() {
 }
 
 fn GenRandomSphere(numPts, r) {
-    // convert to spherical coordinates... duh
     var ptsArr = []
     for (i in 1..numPts) {
         var theta = 2*Pi*random()
@@ -92,7 +91,6 @@ fn GenRandomSphere(numPts, r) {
 }
 
 fn GenRandomBall(numPts, r) {
-    // convert to spherical coordinates... duh
     var ptsArr = []
     for (i in 1..numPts) {
         var rad = r*random()
