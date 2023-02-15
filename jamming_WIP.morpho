@@ -199,7 +199,7 @@ for (i in 0...relaxCycles) {
     var g = Graphics()
     g += plotmesh(s.mesh, grade=[2])
     for (i in 0...p.points.count(0)) {
-        g.display(Sphere(p.points.vertexposition(i), newSigma, color=Green))
+        g.display(Sphere(p.points.vertexposition(i), newSigma/2, color=Green))
     }
     for (obj in [mm_z, mm_x, mm_neg_x, mm_iso]) {
         var gtext = Graphics()
@@ -220,7 +220,7 @@ mm_neg_x.clean()
 mm_iso.clean()
 
 var pp = ParticlePlotter()
-pp.plot(p, s, substrateGrade=[2], points=true, particleRad=newSigma)
+pp.plot(p, s, substrateGrade=[2], points=true, particleRad=newSigma/2)
 
 p.points.save("./meshes/pmesh_${t}_jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}.mesh")
 s.mesh.save("./meshes/smesh_${t}_jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}.mesh")
