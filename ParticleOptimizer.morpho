@@ -37,12 +37,13 @@ class ParticleOptimizer is ShapeOptimizer {
 }
 
 class SubstrateOptimizer is ShapeOptimizer {
-    init(particleProblem, substrateProblem, particlesObj, substrateObj) {
+    init(particleProblem, substrateProblem, particlesObj, substrateObj, maxForceNorm=nil) {
         super.init(substrateProblem, substrateObj.mesh)
         self.particleProblem = particleProblem
         self.substrateProblem = substrateProblem
         self.particlesObj = particlesObj
         self.substrateObj = substrateObj
+        self.maxForceNorm = maxForceNorm
     }
 
     getSubstrateVertexGrad(stepsize=0.0001) {
@@ -83,12 +84,59 @@ class SubstrateOptimizer is ShapeOptimizer {
         return energy    
     }
 
+    capForce(force) {
+        if ((force.norm() < 1e-10) or (self.maxForceNorm == nil)) {
+            return force
+        } else {
+            var norms = []
+            var min_idx
+            var max_idx
+            var min_norm
+            var max_norm
+            for (i in 0...force.dimensions()[1]) {
+                var n = force.column(i).norm()
+                if (i == 0) {
+                    min_idx = 0
+                    max_idx = 0
+                    min_norm = n
+                    max_norm = n
+                } else {
+                    if (n < min_norm) {
+                        min_norm = n
+                        min_idx = i
+                    }
+                    if (n > min_norm) {
+                        max_norm = n
+                        max_idx = i
+                    }
+                }
+                norms.append(force.column(i).norm())
+            }
+            var factor = self.maxForceNorm/(self.stepsize*max_norm)
+            if (factor < 1) {
+                return force * factor
+            } else {
+                return force
+            }
+        }
+    }
+
+
+    totalforcewithconstraints() {
+        var f = self.totalforce() + self.getSubstrateVertexGrad(stepsize=self.stepsize)
+        var ff = self.capForce(f)
+        self.initlocalconstraints() // Find which local constraints are active
+        self.subtractlocalconstraints(f) // Remove projections onto local constraints
+        self.subtractconstraints(f) // Remove projections onto constraint directions
+        return f
+    }
+
     /* Perform relaxation at fixed stepsize */
     relax(n) {
         if (self.energy.count()==0) self.energy.append(self.totalenergy())
 
         for (i in 0...n) {
-            self.force = self.totalforcewithconstraints() + self.getSubstrateVertexGrad(stepsize=self.stepsize)
+            self.force = self.totalforcewithconstraints()
             self.step(self.stepsize)
             self.energy.append(self.totalenergy()) // Track the total energy
             self.report(i)

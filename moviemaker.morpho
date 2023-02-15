@@ -1,0 +1,35 @@
+import povray 
+
+class MovieMaker {
+  init(fname) {
+    self.fname=fname
+    self.count=0
+    self.quiet=true
+    self.framerate = 30 
+    self.viewpoint = Matrix([0,0,5])
+    self.viewangle = 24
+    self.light = [Matrix([10,10,10]), Matrix([-10,-10,10])]
+    self.sky = Matrix([0,1,0])
+  }
+
+  frame(g) {
+    var pov = POVRaytracer(g)
+    pov.viewpoint = self.viewpoint
+    pov.light=self.light
+    pov.viewangle=self.viewangle
+    pov.sky=self.sky
+    pov.camera.sky=self.sky
+    pov.render("./images/${self.fname}${self.count}.pov", display=false, quiet=self.quiet)
+    self.count+=1
+  }
+
+  make() {
+    system("ffmpeg -y -r ${self.framerate} -i ./images/${self.fname}%d.png -pix_fmt yuv420p ${self.fname}_${self.framerate}fps.mp4")
+    system("mv ${self.fname}_${self.framerate}fps.mp4 ./animations")
+  }
+
+  clean() {
+    system("rm ./images/${self.fname}*.png")
+    system("rm ./images/${self.fname}*.pov")
+  }
+}
