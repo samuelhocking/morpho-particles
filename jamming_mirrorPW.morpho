@@ -99,16 +99,8 @@ mesh.setvertexmatrix(M*mesh.vertexmatrix())
 // 2. Initialize Substrate object with substrate mesh argument
 var s = Substrate(mesh)
 
-// 3. Build particle mesh
-var Np = 500 // Number of particles
-// Find Thomson solution for this ellipsoid
-// var ptsArr = GenRandomSphere(Np, r=a)
-// var mbb = MeshBuilder()
-// for (x in ptsArr) mbb.addvertex(x)
-// var particleMesh = mbb.build()
-// particleMesh.save("particleMesh_${t}.mesh")
-
-// Load Thomson solution for this ellipsoid
+// 3. Load particle mesh -> start with pre-computed solution to Thomson problem on the ellipsoid (pre-relaxed particle distribution)
+var Np = 300 // options depend on aspect ratio: for (a,b,c)=(2,1,1) Np options are 300, 500, 800
 var particleMesh = Mesh("./meshes/a${a_0}_b${b_0}_c${c_0}_Np${Np}_sverts${nverts}_thomson.mesh")
 
 // 4. Initialize Particles object with particle mesh argument
@@ -116,7 +108,6 @@ var p = Particles(particleMesh)
 
 // 5. Project particles onto substrate (Particles object method, Substrate object argument)
 p.project(s)
-// p.cleanProject(s, maxPoints=100, verbose=true)
 
 var vol_0 = ellipsoid_vol(a_0,b_0,c_0)
 print("constant initial volume: ${vol_0}")
@@ -136,29 +127,37 @@ var using_sigma = tgt_sigma
 print("using sigma: ${using_sigma}")
 var init_sigma = 0.01
 
+// Optimization parameters
+var substrate_opt_stepsize = 0.005
+var particle_opt_stepsize = 5e-6
+
+var relaxCycles = 2000 // substrate update steps
+var cycleSubsteps = 50 // particle relaxation steps per substrate update step
+
 // Set up problems
 var sproblem = OptimizationProblem(s.mesh)
-var sarea=Area()
+var sarea = Area()
 var svol = VolumeEnclosed()
+var mirror_pot = MirrorPairwisePotential(hertzian_func(sigma=init_sigma, V0=Np), p, s, gradStepsize=substrate_opt_stepsize)
 sproblem.addenergy(sarea)
+sproblem.addenergy(mirror_pot)
 sproblem.addconstraint(svol)
 
 var pproblem = OptimizationProblem(p.points)
 var ppot = PairwisePotential(hertzian_func(sigma=init_sigma, V0=Np),hertzian_grad(sigma=init_sigma, V0=Np))
 pproblem.addenergy(ppot)
 
-var sopt = SubstrateOptimizer(pproblem, sproblem, p, s, maxForceNorm=0.05)
-var popt = ParticleOptimizer(pproblem, p, s)
+// var sopt = SubstrateOptimizer(sproblem, s)
+// var popt = ParticleOptimizer(pproblem, p, s)
+var sopt = SubstrateOptimizer(sproblem, s, maxForceNorm=0.05)
+var popt = ParticleOptimizer(pproblem, p, s, maxForceNorm=0.05)
 
 sopt.quiet=true
 // popt.quiet=true
-sopt.stepsize = 0.01
-popt.stepsize = 1e-5
+sopt.stepsize = substrate_opt_stepsize
+sopt.maxconstraintsteps = 50
+popt.stepsize = particle_opt_stepsize
 
-var relaxCycles = 2000
-var cycleSubsteps = 200
-
-// var ds = dynamic_sigma(using_sigma, init_sigma, tgt_jammed_area, c=5)
 var ds = dynamic_sigma(using_sigma, init_sigma, tgt_jammed_area, c=20, d=1, e=1)
 
 var mm_z = MovieMaker("${t}_jam_view_z_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}")
@@ -179,23 +178,35 @@ mm_iso.viewpoint = Matrix([5,5,5])*5/Matrix([5,5,5]).norm()
 mm_iso.viewangle = 50
 mm_iso.sky = Matrix([-1,2,-1])
 
-var substrate_energies = [sopt.totalenergy()]
-var particle_energies = [popt.totalenergy()]
+var substrate_areas = [sproblem.energies[0].functional.total(s.mesh)]
+var substrate_particle_energies = [sproblem.energies[1].functional.total(nil)]
+// var substrate_energies = [sopt.totalenergy()]
+var substrate_energies = [substrate_areas[-1]+substrate_particle_energies[-1]]
+// var particle_energies = [popt.totalenergy()]
 
 var newppot
+var newmirrorpot
 var newSigma = init_sigma
 for (i in 0...relaxCycles) {
+    newSigma = max(newSigma, ds(sproblem.energies[0].functional.total(s.mesh)))
+    newmirrorpot = MirrorPairwisePotential(hertzian_func(sigma=newSigma, V0=Np), p, s, gradStepsize=substrate_opt_stepsize)
+    newppot = PairwisePotential(hertzian_func(sigma=newSigma, V0=Np), hertzian_grad(sigma=newSigma, V0=Np))
+    sproblem.energies[1].functional = newmirrorpot
+    pproblem.energies[0].functional = newppot
+    
+    sopt.settarget(s.mesh.vertexmatrix())
     sopt.relax(1)
     s.updateCoords()
-    sopt.settarget(s.mesh.vertexmatrix())
     p.updateCartesianCoords(s)
     popt.settarget(p.points.vertexmatrix())
-    newSigma = max(newSigma, ds(sopt.totalenergy()))
-    newppot = PairwisePotential(hertzian_func(sigma=newSigma, V0=Np), hertzian_grad(sigma=newSigma, V0=Np))
-    pproblem.energies[0].functional = newppot
     popt.relax(cycleSubsteps)
-    substrate_energies.append(sopt.totalenergy())
-    particle_energies.append(popt.totalenergy())
+
+    substrate_areas.append(sproblem.energies[0].functional.total(s.mesh))
+    substrate_particle_energies.append(sproblem.energies[1].functional.total(nil))
+    // substrate_energies.append(sopt.totalenergy())
+    substrate_energies.append(substrate_areas[-1]+substrate_particle_energies[-1])
+    // particle_energies.append(popt.totalenergy())
+
     var g = Graphics()
     g += plotmesh(s.mesh, grade=[2])
     for (i in 0...p.points.count(0)) {
@@ -207,7 +218,7 @@ for (i in 0...relaxCycles) {
         gtext += g
         obj.frame(gtext)
     }
-    print("iter: ${i}  area: ${substrate_energies[-1]} (delta E: ${substrate_energies[-1]-substrate_energies[-2]}) pw energy: ${particle_energies[-1]} (delta E: ${particle_energies[-1]-particle_energies[-2]}) tgt area: ${tgt_jammed_area} tgtSigma: ${using_sigma} newSigma: ${newSigma} stepsize: ${sopt.stepsize}")
+    print("iter: ${i} energy: ${substrate_energies[-1]} (delta E: ${substrate_energies[-1]-substrate_energies[-2]}) area: ${substrate_areas[-1]} (delta E: ${substrate_areas[-1]-substrate_areas[-2]}) pw energy: ${substrate_particle_energies[-1]} (delta E: ${substrate_particle_energies[-1]-substrate_particle_energies[-2]}) stepsize: ${sopt.stepsize}")
 }
 
 mm_z.make()
@@ -222,5 +233,11 @@ mm_iso.clean()
 var pp = ParticlePlotter()
 pp.plot(p, s, substrateGrade=[2], points=true, particleRad=newSigma/2)
 
-p.points.save("./meshes/pmesh_${t}_jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}.mesh")
-s.mesh.save("./meshes/smesh_${t}_jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}.mesh")
+p.points.save("./meshes/${t}_pmesh_jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}.mesh")
+s.mesh.save("./meshes/${t}_smesh_jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}.mesh")
+
+var f = File("./data/${t}_energies_jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}.mesh.txt", "w")
+f.write("iter, substrate_energy, substrate_area, substrate_particle_energy")
+for (i in 0...substrate_energies.count()) {
+    f.write("${i}, ${substrate_energies[i]}, ${substrate_areas[i]}, ${substrate_particle_energies[i]}")
+}

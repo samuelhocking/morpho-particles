@@ -3,85 +3,93 @@
 
 import optimize
 
-class ParticleOptimizer is ShapeOptimizer {
-    init(particleProblem, particlesObj, substrateObj) {
-        super.init(particleProblem, particlesObj.points)
-        self.particlesObj = particlesObj
-        self.substrateObj = substrateObj
+/*
+PairwisePotential which separately asssesses the integrand on the reference particle coords
+and numerically computes the gradient of that func w/r/t the reference substrate object's vertex coords.
+Intended for use as an energy in the substrate problem.
+*/
+class MirrorPairwisePotential < Functional {
+    init (func, refParticlesObj, refSubstrateObj, cutoff=nil, gradStepsize=1e-6) {
+        self.func = func
+        self.refParticlesObj = refParticlesObj
+        self.refSubstrateObj = refSubstrateObj
+        self.cutoff = cutoff
+        self.gradStepsize = gradStepsize
+        super.init(0)
     }
 
-    /* Perform relaxation at fixed stepsize */
-    relax(n) {
-        if (self.energy.count()==0) self.energy.append(self.totalenergy())
-
-        for (i in 0...n) {
-            self.force = self.totalforcewithconstraints()
-            self.step(self.stepsize)
-            self.energy.append(self.totalenergy()) // Track the total energy
-            self.report(i)
-            if (self.hasconverged()) break
+    // the mesh argument is typically the target of the optimizer. This becomes a dummy
+    buildtree(mesh) {
+        var vert = self.refParticlesObj.points.vertexmatrix()
+        var nv = self.refParticlesObj.points.count()
+        var pts = []
+        for (i in 0...nv) {
+        pts.append(vert.column(i))
         }
-        return self.energy
+        return KDTree(pts)
     }
 
-    /* Take a step */
-    step(stepsize) {
-        // var target = self.gettarget()
-        var frc = self.force*stepsize*(-1) // Use the force
-        if (!frc) return
+    // similarly, mesh becomes a useless dummy arg. The integrand is evaluated over the ref particle coords
+    integrand(mesh) {
+        var nv = self.refParticlesObj.points.count()
+        var out = Matrix(nv)
+        var vert = self.refParticlesObj.points.vertexmatrix()
 
-        self.particlesObj.points.vertexmatrix().acc(1,frc)
-        self.particlesObj.projectPoints(self.substrateObj)
-        self.settarget(self.particlesObj.points.vertexmatrix())
+        for (i in 0...nv) {
+        var x = vert.column(i)
+        for (j in i+1...nv) {
+            var r = (x-vert.column(j)).norm()
+            if (self.cutoff && r>self.cutoff) continue
+            var f = self.func(r)
+            out[i]+=0.5*f
+            out[j]+=0.5*f
+        }
+        }
+        return out
+    }
+
+    // here, the gradient is numerically evaluated with respect to the substrate vertex coords
+    gradient(mesh) {
+        var nv = self.refSubstrateObj.mesh.count(0)
+        var out = Matrix(3, nv)
+        var I = Eye(3)
+
+        for (i in 0...nv) {
+            var grads = Matrix(3)
+            for (j in 0..2) {
+                // compute partial derivative of the total particle energy w/r/t x_j via centered finite difference
+
+                // take a gradStepsize step in the e_j basis direction
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, self.refSubstrateObj.mesh.vertexmatrix().column(i) + self.gradStepsize*I.column(j))
+                // parallel transport the particles
+                self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
+                var fplus = self.integrand(nil) // evaluate particle energy at updated substrate vertex coords
+
+                // take a 2*gradStepsize step in the -e_j basis direction
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, self.refSubstrateObj.mesh.vertexmatrix().column(i) - 2*self.gradStepsize*I.column(j))
+                // parallel transport the particles
+                self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
+                var fminus = self.integrand(nil) // evaluate particle energy at updated substrate vertex coords
+
+                // take a gradStepsize step in the e_j basis direction (to get back to the original location)
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, self.refSubstrateObj.mesh.vertexmatrix().column(i) + self.gradStepsize*I.column(j))
+                // parallel transport the particles
+                self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
+
+                grads[j] = (fplus-fminus)/(2*self.gradStepsize)
+            }
+            out.setcolumn(i, grads)
+        }
+        return out
     }
 }
 
-class SubstrateOptimizer is ShapeOptimizer {
-    init(particleProblem, substrateProblem, particlesObj, substrateObj, maxForceNorm=nil) {
-        super.init(substrateProblem, substrateObj.mesh)
-        self.particleProblem = particleProblem
-        self.substrateProblem = substrateProblem
+class ParticleOptimizer is ShapeOptimizer {
+    init(particleProblem, particlesObj, substrateObj, maxForceNorm=nil) {
+        super.init(particleProblem, particlesObj.points)
         self.particlesObj = particlesObj
         self.substrateObj = substrateObj
         self.maxForceNorm = maxForceNorm
-    }
-
-    getSubstrateVertexGrad(stepsize=0.0001) {
-        var I = Eye(3)
-
-        var substrateVertexGrad = Matrix(3, self.substrateObj.mesh.count(0))
-        for (i in 0...self.substrateObj.mesh.count(0)) {
-            var grads = []
-            for (j in 0..2) {
-                self.substrateObj.mesh.vertexmatrix().setcolumn(i, self.substrateObj.mesh.vertexmatrix().column(i) + stepsize*I.column(j))
-                self.particlesObj.updateCartesianCoords(self.substrateObj)
-                // var fplus = self.particleProblem.totalenergy()
-                var fplus = self.totalParticleEnergy()
-
-                self.substrateObj.mesh.vertexmatrix().setcolumn(i, self.substrateObj.mesh.vertexmatrix().column(i) - 2*stepsize*I.column(j))
-                self.particlesObj.updateCartesianCoords(self.substrateObj)
-                // var fminus = self.particleProblem.totalenergy()
-                var fminus = self.totalParticleEnergy()
-
-                self.substrateObj.mesh.vertexmatrix().setcolumn(i, self.substrateObj.mesh.vertexmatrix().column(i) + stepsize*I.column(j))
-                self.particlesObj.updateCartesianCoords(self.substrateObj)
-
-                grads.append((fplus-fminus)/(2*stepsize))
-            }
-            // print("done: ${i}/${p.numPoints-1}")
-            // print("gradient")
-            // print(grads)
-            substrateVertexGrad.setcolumn(i, Matrix(grads))
-        }
-        return substrateVertexGrad
-    }
-
-    totalParticleEnergy() {
-        var energy = 0
-        for (en in self.particleProblem.energies) {
-            energy+=self.total(en)
-        }
-        return energy    
     }
 
     capForce(force) {
@@ -121,9 +129,79 @@ class SubstrateOptimizer is ShapeOptimizer {
         }
     }
 
+    /* Perform relaxation at fixed stepsize */
+    relax(n) {
+        if (self.energy.count()==0) self.energy.append(self.totalenergy())
+
+        for (i in 0...n) {
+            self.force = self.capForce(self.totalforcewithconstraints())
+            self.step(self.stepsize)
+            self.energy.append(self.totalenergy()) // Track the total energy
+            self.report(i)
+            if (self.hasconverged()) break
+        }
+        return self.energy
+    }
+
+    /* Take a step */
+    step(stepsize) {
+        // var target = self.gettarget()
+        var frc = self.force*stepsize*(-1) // Use the force
+        if (!frc) return
+
+        self.particlesObj.points.vertexmatrix().acc(1,frc)
+        self.particlesObj.projectPoints(self.substrateObj)
+        self.settarget(self.particlesObj.points.vertexmatrix())
+    }
+}
+
+class SubstrateOptimizer is ShapeOptimizer {
+    init(substrateProblem, substrateObj, maxForceNorm=nil) {
+        super.init(substrateProblem, substrateObj.mesh)
+        self.substrateProblem = substrateProblem
+        self.substrateObj = substrateObj
+        self.maxForceNorm = maxForceNorm
+    }
+
+    capForce(force) {
+        if ((force.norm() < 1e-10) or (self.maxForceNorm == nil)) {
+            return force
+        } else {
+            var norms = []
+            var min_idx
+            var max_idx
+            var min_norm
+            var max_norm
+            for (i in 0...force.dimensions()[1]) {
+                var n = force.column(i).norm()
+                if (i == 0) {
+                    min_idx = 0
+                    max_idx = 0
+                    min_norm = n
+                    max_norm = n
+                } else {
+                    if (n < min_norm) {
+                        min_norm = n
+                        min_idx = i
+                    }
+                    if (n > min_norm) {
+                        max_norm = n
+                        max_idx = i
+                    }
+                }
+                norms.append(force.column(i).norm())
+            }
+            var factor = self.maxForceNorm/(self.stepsize*max_norm)
+            if (factor < 1) {
+                return force * factor
+            } else {
+                return force
+            }
+        }
+    }
 
     totalforcewithconstraints() {
-        var f = self.totalforce() + self.getSubstrateVertexGrad(stepsize=self.stepsize)
+        var f = self.totalforce()
         var ff = self.capForce(f)
         self.initlocalconstraints() // Find which local constraints are active
         self.subtractlocalconstraints(f) // Remove projections onto local constraints
