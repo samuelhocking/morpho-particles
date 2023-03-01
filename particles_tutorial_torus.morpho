@@ -24,7 +24,7 @@ var s = Substrate(mesh)
 
 // 3. Build particle mesh
 var ptsArr = GenRandomRectangle(
-    1000,
+    100,
     xBounds=[-2,0],
     yBounds=[-2,0],
     zBounds=[-2,2]
@@ -43,7 +43,7 @@ p.project(s)
 var e1 = Matrix([1,0,0])
 var e2 = Matrix([0,1,0])
 var e3 = Matrix([0,0,1])
-var f = ConstantForce(1*e1+1*e2)
+var f = ConstantForce(1.5*e1+1.5*e2)
 // var f = ConstantForce(-1*e3)
 
 // 7. Move particles along substrate by applying the force (Particles object method, Substrate and Force object arguments)

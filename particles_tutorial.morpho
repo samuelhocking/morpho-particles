@@ -46,6 +46,17 @@ for (f in faces) mb.addface(f)
 var plane = mb.build()
 var mesh = plane
 
+//Tetrahedron
+// var verts = [[0, 0.57735027, -0.25],[-0.5,-0.28867513,-0.25],[0.5,-0.28867513,-0.25],[0,0,0.5]]
+// var edges = [[0,1],[0,2],[1,2],[0,3],[1,3],[2,3]]
+// var faces = [[0,1,2],[0,1,3],[1,2,3],[0,2,3]]
+// var mb = MeshBuilder()
+// for (v in verts) mb.addvertex(v)
+// for (e in edges) mb.addedge(e)
+// for (f in faces) mb.addface(f)
+// var tetra = mb.build()
+// var mesh = tetra
+
 // 2. Initialize Substrate object with substrate mesh argument
 var s = Substrate(mesh)
 
@@ -57,6 +68,7 @@ var ptsArr = GenParametrizedLine(
     tEnd = 1,
     numPts = 20
     )
+// var ptsArr = GenParametrizedBall(r=0.6, usteps=10, vsteps=8, wsteps=1)
 var mbb = MeshBuilder()
 for (x in ptsArr) mbb.addvertex(x)
 var particleMesh = mbb.build()
@@ -82,3 +94,4 @@ var pp = ParticlePlotter()
 
 // 9. Plot
 pp.plot(p, s, substrateGrade=[2], projectablePoints=true, projectedPoints=true, points=true)
+// pp.plot(p, s, substrateGrade=[2], projectablePoints=true, projectedPoints=true)

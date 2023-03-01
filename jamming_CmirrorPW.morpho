@@ -4,6 +4,7 @@ import meshtools
 import plot
 import functionals
 import color
+import pairwise
 
 import "morpho-particles.morpho" 
 import "RandomPoints.morpho"
@@ -151,18 +152,22 @@ var cycleSubsteps = 100 // particle relaxation steps per substrate update step
 var sproblem = OptimizationProblem(s.mesh)
 var sarea = Area()
 // var mirror_pot = MirrorPairwisePotential(hertzian_func(sigma=init_sigma, V0=Np), p, s, gradStepsize=substrate_opt_stepsize)
-var mirror_pot = MirrorPairwisePotential(hertzian_func(sigma=init_sigma, V0=V0), p, s, gradStepsize=1e-3)
+// var mirror_pot = MirrorPairwisePotential(hertzian_func(sigma=init_sigma, V0=V0), p, s, gradStepsize=1e-3)
+var hertz = HertzianPotential(init_sigma)
+var pw = Pairwise(hertz, cutoff=init_sigma)
+var mirror_pot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-3)
 var scurve = MeanCurvatureSq()
 var svol = VolumeEnclosed()
 sproblem.addenergy(sarea)
 sproblem.addenergy(mirror_pot)
-sproblem.addenergy(scurve, prefactor=0.1)
+sproblem.addenergy(scurve, prefactor=0.01)
 sproblem.addconstraint(svol)
 
 var pproblem = OptimizationProblem(p.points)
 // var ppot = PairwisePotential(hertzian_func(sigma=init_sigma, V0=Np),hertzian_grad(sigma=init_sigma, V0=Np))
-var ppot = PairwisePotential(hertzian_func(sigma=init_sigma, V0=V0),hertzian_grad(sigma=init_sigma, V0=V0))
-pproblem.addenergy(ppot)
+// var ppot = PairwisePotential(hertzian_func(sigma=init_sigma, V0=V0),hertzian_grad(sigma=init_sigma, V0=V0))
+// pproblem.addenergy(ppot)
+pproblem.addenergy(pw)
 
 // var sopt = SubstrateOptimizer(sproblem, s)
 // var popt = ParticleOptimizer(pproblem, p, s)
@@ -217,10 +222,12 @@ for (i in 0...relaxCycles) {
     newSigma = max(newSigma, ds(sproblem.energies[0].functional.total(s.mesh)))
     // newmirrorpot = MirrorPairwisePotential(hertzian_func(sigma=newSigma, V0=Np), p, s, gradStepsize=substrate_opt_stepsize)
     // newppot = PairwisePotential(hertzian_func(sigma=newSigma, V0=Np), hertzian_grad(sigma=newSigma, V0=Np))
-    newmirrorpot = MirrorPairwisePotential(hertzian_func(sigma=newSigma, V0=V0), p, s, gradStepsize=substrate_opt_stepsize)
-    newppot = PairwisePotential(hertzian_func(sigma=newSigma, V0=V0), hertzian_grad(sigma=newSigma, V0=V0))
+    pw.cutoff = newSigma
+    hertz.sigma = newSigma
+    newmirrorpot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-3)
+    // newppot = PairwisePotential(hertzian_func(sigma=newSigma, V0=V0), hertzian_grad(sigma=newSigma, V0=V0))
     sproblem.energies[1].functional = newmirrorpot
-    pproblem.energies[0].functional = newppot
+    pproblem.energies[0].functional = pw
     
     sopt.settarget(s.mesh.vertexmatrix())
     sopt.relax(1)

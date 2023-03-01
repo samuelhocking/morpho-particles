@@ -1622,7 +1622,7 @@ class ParticlePlotter{
         if (projectedPoints == true) {
             var gProjected = Graphics()
             for (i in 0...ParticlesObj.projectedPoints.count(0)) {
-                gProjected.display(Sphere(ParticlesObj.projectedPoints.vertexposition(i),particleRad), color=[0,0,255])
+                gProjected.display(Sphere(ParticlesObj.projectedPoints.vertexposition(i),particleRad, color=[0,0,255]))
             }          
             gCombined += gProjected.clone()
         }

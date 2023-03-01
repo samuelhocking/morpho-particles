@@ -6,7 +6,69 @@ import optimize
 /*
 PairwisePotential which separately asssesses the integrand on the reference particle coords
 and numerically computes the gradient of that func w/r/t the reference substrate object's vertex coords.
-Intended for use as an energy in the substrate problem.
+Intended for use as an energy in the substrate problem.      
+*/
+class CMirrorPairwisePotential < Functional {
+    init (CPairwiseObj, refParticlesObj, refSubstrateObj, gradStepsize=1e-6) {
+        self.CPairwiseObj = CPairwiseObj
+        self.refParticlesObj = refParticlesObj
+        self.refSubstrateObj = refSubstrateObj
+        self.gradStepsize = gradStepsize
+        super.init(0)
+    }
+
+    // mesh is dummy arg
+    // pass-thru call to C pairwise obj's integrand on the particle mesh
+    integrand(mesh) {
+        return self.CPairwiseObj.integrand(self.refParticlesObj.points)
+    }
+
+    // here, the gradient is numerically evaluated with respect to the substrate vertex coords
+    gradient(mesh) {
+        var nv = self.refSubstrateObj.mesh.count(0)
+        var out = Matrix(3, nv)
+        var I = Eye(3)
+
+        for (i in 0...nv) {
+            var grads = Matrix(3)
+            for (j in 0..2) {
+                // compute partial derivative of the total particle energy w/r/t x_j via centered finite difference
+
+                var initLoc = self.refSubstrateObj.mesh.vertexmatrix().column(i).clone()
+                var dir = self.gradStepsize*I.column(j)
+
+                // take a gradStepsize step in the e_j basis direction
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, initLoc + dir)
+                // parallel transport the particles
+                self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
+                var fplus = self.integrand(nil).sum() // evaluate particle energy at updated substrate vertex coords
+
+                // take a 2*gradStepsize step in the -e_j basis direction
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, initLoc - dir)
+                // parallel transport the particles
+                self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
+                var fminus = self.integrand(nil).sum() // evaluate particle energy at updated substrate vertex coords
+                // print("${i}, ${j}")
+                // print(fplus)
+                // print(fminus)
+
+                // take a gradStepsize step in the e_j basis direction (to get back to the original location)
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, initLoc)
+                // parallel transport the particles
+                self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
+
+                grads[j] = (fplus-fminus)/(2*self.gradStepsize)
+            }
+            out.setcolumn(i, grads)
+        }
+        return out
+    }
+}
+
+/*
+PairwisePotential which separately asssesses the integrand on the reference particle coords
+and numerically computes the gradient of that func w/r/t the reference substrate object's vertex coords.
+Intended for use as an energy in the substrate problem.      
 */
 class MirrorPairwisePotential < Functional {
     init (func, refParticlesObj, refSubstrateObj, cutoff=nil, gradStepsize=1e-6) {
@@ -59,20 +121,26 @@ class MirrorPairwisePotential < Functional {
             for (j in 0..2) {
                 // compute partial derivative of the total particle energy w/r/t x_j via centered finite difference
 
+                var initLoc = self.refSubstrateObj.mesh.vertexmatrix().column(i).clone()
+                var dir = self.gradStepsize*I.column(j)
+
                 // take a gradStepsize step in the e_j basis direction
-                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, self.refSubstrateObj.mesh.vertexmatrix().column(i) + self.gradStepsize*I.column(j))
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, initLoc + dir)
                 // parallel transport the particles
                 self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
-                var fplus = self.integrand(nil) // evaluate particle energy at updated substrate vertex coords
+                var fplus = self.integrand(nil).sum() // evaluate particle energy at updated substrate vertex coords
 
                 // take a 2*gradStepsize step in the -e_j basis direction
-                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, self.refSubstrateObj.mesh.vertexmatrix().column(i) - 2*self.gradStepsize*I.column(j))
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, initLoc - dir)
                 // parallel transport the particles
                 self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
-                var fminus = self.integrand(nil) // evaluate particle energy at updated substrate vertex coords
+                var fminus = self.integrand(nil).sum() // evaluate particle energy at updated substrate vertex coords
+                // print("${i}, ${j}")
+                // print(fplus)
+                // print(fminus)
 
                 // take a gradStepsize step in the e_j basis direction (to get back to the original location)
-                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, self.refSubstrateObj.mesh.vertexmatrix().column(i) + self.gradStepsize*I.column(j))
+                self.refSubstrateObj.mesh.vertexmatrix().setcolumn(i, initLoc)
                 // parallel transport the particles
                 self.refParticlesObj.updateCartesianCoords(self.refSubstrateObj)
 
@@ -90,6 +158,7 @@ class ParticleOptimizer is ShapeOptimizer {
         self.particlesObj = particlesObj
         self.substrateObj = substrateObj
         self.maxForceNorm = maxForceNorm
+        self.gradNorms = []
     }
 
     capForce(force) {
@@ -118,7 +187,7 @@ class ParticleOptimizer is ShapeOptimizer {
                         max_idx = i
                     }
                 }
-                norms.append(force.column(i).norm())
+                norms.append(n)
             }
             var factor = self.maxForceNorm/(self.stepsize*max_norm)
             if (factor < 1) {
@@ -129,12 +198,26 @@ class ParticleOptimizer is ShapeOptimizer {
         }
     }
 
+    totalforcewithconstraints() {
+        var f = self.totalforce()
+        var norms = []
+        for (i in 0...f.dimensions()[1]) {
+            norms.append(f.column(i).norm())
+        }
+        self.gradNorms.append(norms)
+        var ff = self.capForce(f)
+        self.initlocalconstraints() // Find which local constraints are active
+        self.subtractlocalconstraints(f) // Remove projections onto local constraints
+        self.subtractconstraints(f) // Remove projections onto constraint directions
+        return f
+    }
+
     /* Perform relaxation at fixed stepsize */
     relax(n) {
         if (self.energy.count()==0) self.energy.append(self.totalenergy())
 
         for (i in 0...n) {
-            self.force = self.capForce(self.totalforcewithconstraints())
+            self.force = self.totalforcewithconstraints()
             self.step(self.stepsize)
             self.energy.append(self.totalenergy()) // Track the total energy
             self.report(i)
@@ -146,10 +229,11 @@ class ParticleOptimizer is ShapeOptimizer {
     /* Take a step */
     step(stepsize) {
         // var target = self.gettarget()
-        var frc = self.force*stepsize*(-1) // Use the force
+        // var frc = self.force*stepsize*(-1) // Use the force
+        var frc = self.force // Use the force
         if (!frc) return
 
-        self.particlesObj.points.vertexmatrix().acc(1,frc)
+        self.particlesObj.points.vertexmatrix().acc(-stepsize,frc)
         self.particlesObj.projectPoints(self.substrateObj)
         self.settarget(self.particlesObj.points.vertexmatrix())
     }
@@ -161,6 +245,7 @@ class SubstrateOptimizer is ShapeOptimizer {
         self.substrateProblem = substrateProblem
         self.substrateObj = substrateObj
         self.maxForceNorm = maxForceNorm
+        self.gradNorms = []
     }
 
     capForce(force) {
@@ -189,7 +274,7 @@ class SubstrateOptimizer is ShapeOptimizer {
                         max_idx = i
                     }
                 }
-                norms.append(force.column(i).norm())
+                norms.append(n)
             }
             var factor = self.maxForceNorm/(self.stepsize*max_norm)
             if (factor < 1) {
@@ -198,6 +283,25 @@ class SubstrateOptimizer is ShapeOptimizer {
                 return force
             }
         }
+    }
+
+    totalforce() {
+        var energies = self.energies()
+        var f
+        if (!islist(energies) || energies.count()==0) print "Warning: Problem has no active functionals."
+        var norms = []
+        for (en in energies) {
+            var grad = self.gradient(en)
+            for (i in 0...grad.dimensions()[1]) {
+                norms.append(grad.column(i).norm())
+            }
+            f+=grad
+        }
+        for (i in 0...f.dimensions()[1]) {
+            norms.append(f.column(i).norm())
+        }
+        self.gradNorms.append(norms)
+        return f
     }
 
     totalforcewithconstraints() {
@@ -236,108 +340,5 @@ class SubstrateOptimizer is ShapeOptimizer {
         self.reprojectlocalconstraints() // Reproject onto local constraints
         self.reprojectconstraints() // Push back onto constraints
         self.settarget(self.substrateObj.mesh.vertexmatrix())
-    }
-}
-
-class JointOptimizer is ShapeOptimizer {
-    init(particleProblem, substrateProblem, particlesObj, substrateObj, movieMakerObj=nil) {
-        self.particleProblem = particleProblem
-        self.substrateObj = substrateProblem
-        self.particlesObj = particlesObj
-        self.substrateObj = substrateObj
-        self.movieMakerObj = movieMakerObj
-        self.particleOpt = ParticleOptimizer(particleProblem, particlesObj, substrateObj)
-        self.substrateOpt = SubstrateOptimizer(particleProblem, substrateProblem, particlesObj, substrateObj)
-        self.energy = [] // History of energies
-        self.etol = 1e-8 // Energy convergence criterion
-        self.ctol = 1e-10 // Constraint satisfaction criterion
-        self.particleOpt.etol = self.etol
-        self.particleOpt.ctol = self.ctol
-        self.substrateOpt.etol = self.etol
-        self.substrateOpt.ctol = self.ctol
-        self.quiet = false
-        self.particleOpt.quiet = true
-        self.substrateOpt.quiet = true
-    }
-
-    relax(n, film=false) {
-        if (self.particleOpt.energy.count()==0) self.particleOpt.energy.append(self.particleOpt.totalenergy())
-        if (self.substrateOpt.energy.count()==0) self.substrateOpt.energy.append(self.substrateOpt.totalenergy())
-        if (self.energy.count()==0) self.energy.append(self.particleOpt.totalenergy()+self.substrateOpt.totalenergy())
-        if (self.quiet == false)
-            print(
-                "Initial energies.
-            Total     | Energy: ${self.energy[-1]}
-            Substrate | Energy: ${self.substrateOpt.energy[-1]}
-            Particles | Energy: ${self.particleOpt.energy[-1]}"
-                )
-        for (i in 0...n) {
-            self.particleOpt.force = self.particleOpt.totalforcewithconstraints()
-            var regularSubstrateForces = self.substrateOpt.totalforcewithconstraints()
-            var particleSubstrateForces = self.substrateOpt.getSubstrateVertexGrad()
-            // var normed_regularSubstrateForces = regularSubstrateForces.clone()
-            // var normed_particleSubstrateForces = particleSubstrateForces.clone()
-            // for (i in 0...normed_regularSubstrateForces.dimensions()[1]) {
-            //     var x = normed_regularSubstrateForces.column(i)
-            //     if (x.norm() > 1e-10) {
-            //         normed_regularSubstrateForces.setcolumn(i, x/x.norm())
-            //     }
-            // }
-            // for (i in 0...normed_particleSubstrateForces.dimensions()[1]) {
-            //     var x = normed_particleSubstrateForces.column(i)
-            //     if (x.norm() > 1e-10) {
-            //         normed_particleSubstrateForces.setcolumn(i, x/x.norm())
-            //     }
-            // }
-            // var dots = normed_regularSubstrateForces.transpose() * normed_particleSubstrateForces
-            // print("orthogonality")
-            // print(dots.sum()/dots.count())
-            self.substrateOpt.force = regularSubstrateForces + particleSubstrateForces
-            self.substrateOpt.step(self.substrateOpt.stepsize)
-            self.substrateObj.updateCoords()
-            self.particleOpt.step(self.particleOpt.stepsize)
-            self.substrateOpt.settarget(self.substrateObj.mesh.vertexmatrix())
-            self.particleOpt.settarget(self.particlesObj.points.vertexmatrix())
-            self.particleOpt.energy.append(self.particleOpt.totalenergy())
-            self.substrateOpt.energy.append(self.substrateOpt.totalenergy())
-            self.energy.append(self.particleOpt.totalenergy()+self.substrateOpt.totalenergy())
-            self.report(i)
-            if (film == true) {
-                var g = Graphics()
-                g += plotmesh(self.substrateObj.mesh, grade=[2])
-                for (i in 0...self.particlesObj.points.count(0)) {
-                    g.display(Sphere(self.particlesObj.points.vertexposition(i), 0.05, color=Green))
-                }              
-                self.movieMakerObj.frame(g)
-            }
-            // print(" particle  force norm  : ${self.particleOpt.totalforcewithconstraints().norm()}")
-            // print(" substrate force norm  : ${self.substrateOpt.totalforcewithconstraints().norm()}")
-            // print(" substrate vertex norm : ${self.substrateOpt.getSubstrateVertexGrad().norm()}")
-            if (self.hasconverged()) break
-        }
-    }
-
-    hasconverged() {
-        var energy = self.energy
-        if (energy.count()>1) {
-            var de = abs(energy[-1]-energy[-2])
-            if (abs(energy[-1])<self.etol || de/abs(energy[-1])<self.etol) return true
-        }
-        return false
-    }
-
-    report(iter) {
-        if (self.energy.count()<2) return
-        var de = abs(self.energy[-1]-self.energy[-2])
-        var sde = abs(self.substrateOpt.energy[-1]-self.substrateOpt.energy[-2])
-        var pde = abs(self.particleOpt.energy[-1]-self.particleOpt.energy[-2])
-        if (!self.quiet) {
-            print(
-                "Iteration ${iter}.
-        Total     | Energy: ${self.energy[-1]} delta E: ${de}
-        Substrate | Energy: ${self.substrateOpt.energy[-1]} delta E: ${sde} stepsize: ${self.substrateOpt.stepsize}
-        Particles | Energy: ${self.particleOpt.energy[-1]} delta E: ${pde} stepsize: ${self.particleOpt.stepsize}"
-            )
-        }
     }
 }

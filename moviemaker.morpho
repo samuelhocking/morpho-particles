@@ -10,6 +10,7 @@ class MovieMaker {
     self.viewangle = 24
     self.light = [Matrix([10,10,10]), Matrix([-10,-10,10])]
     self.sky = Matrix([0,1,0])
+    self.look_at = Matrix([0,0,0])
   }
 
   frame(g) {
