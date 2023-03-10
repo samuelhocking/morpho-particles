@@ -1,0 +1,273 @@
+// Inducing metric jamming driven by particles embedded on mesh surface
+// By: Sam Hocking
+
+import meshtools
+import plot
+import functionals
+import color
+import pairwise
+
+import "../utils/morpho-particles.morpho" 
+import "../utils/RandomPoints.morpho"
+import "../utils/ParticleOptimizer.morpho"
+import "../utils/LinAlgTools.morpho"
+import "../utils/moviemaker.morpho"
+import "../utils/listTxt.morpho"
+
+fn bfunc(a, vol_0) {
+    return sqrt(3*vol_0/(4*a*Pi))
+}
+fn rad(vol_0) {
+    return (3*vol_0/(4*Pi))^(1/3)
+}
+fn sphere_area(r) {
+    return 4*Pi*r^2
+}
+fn sphere_vol(r) {
+    return 4/3*Pi*r^3
+}
+fn ellipsoid_area(a,b,c) {
+    return 4*Pi*(((a*b)^1.6075+(a*c)^1.6075+(b*c)^1.6075)/3)^(1/1.6075)
+}
+fn ellipsoid_vol(a,b,c) {
+    return 4/3*Pi*a*b*c
+}
+fn thomson_func (r) {
+    if (r != 0) {
+        return 1/r
+    } else {
+        return 0
+    }
+}
+fn thomson_grad (r) {
+    if (r != 0) {
+        return -1/r^2
+    } else {
+        return 0
+    }
+}
+fn hertzian_func (sigma=0.1, V0=100) {
+    sigma = sigma
+    V0 = V0
+    fn inner(r) {
+        if (r < sigma) {
+            return V0*(1-r/sigma)^(5/2)
+        } else {
+            return 0
+        }
+    }
+    return inner
+}
+fn hertzian_grad (sigma=0.1, V0=100) {
+    sigma = sigma
+    V0 = V0
+    fn inner(r) {
+        if (r < sigma) {
+            return -5*V0/(2*sigma)*(1-r/sigma)^(3/2)
+        } else {
+            return 0
+        }
+    }
+    return inner
+}
+fn dynamic_sigma(tgtSigma, initSigma, tgtArea, c=1, d=0, e=0) {
+    tgtSigma = tgtSigma
+    initSigma = initSigma
+    tgtArea = tgtArea
+    c = c
+    fn inner(area) {
+        return initSigma + 1/2*(tgtSigma-initSigma)*(1+tanh(c*(tgtArea-area)+d*5/4*Pi))
+    }
+    return inner
+}
+fn linear_sigma(tgtSigma, initSigma, initArea, tgtArea) {
+    tgtSigma = tgtSigma
+    initSigma = initSigma
+    tgtArea = tgtArea
+    fn inner(area) {
+        return min(tgtSigma, max(initSigma, initSigma + (tgtSigma-initSigma)/(initArea - tgtArea)*((initArea - area))))
+    }
+    return inner
+}
+
+system("echo $(date '+%Y_%m_%d_%X') >> t.txt")
+var t_file = File("t.txt")
+var t = t_file.readline()
+t_file.close()
+system("rm t.txt")
+
+// 1. Build substrate mesh
+var nverts = 162 // options: 42, 162, 642, 2562, 10242
+var mesh = Mesh("../meshes/sphere_icosa_r_1_vol_4.18879_${nverts}_vertices.mesh")
+var a_0 = 2
+var b_0 = 1
+var c_0 = 1
+var M = Matrix([
+    [a_0,0,0],
+    [0,b_0,0],
+    [0,0,c_0]
+])
+mesh.setvertexmatrix(M*mesh.vertexmatrix())
+
+// 2. Initialize Substrate object with substrate mesh argument
+var s = Substrate(mesh)
+
+// 3. Load particle mesh -> start with pre-computed solution to Thomson problem on the ellipsoid (pre-relaxed particle distribution)
+var Np = 300 // options depend on aspect ratio: for (a,b,c)=(2,1,1) Np options are 300, 500, 800
+var particleMesh = Mesh("../meshes/a${a_0}_b${b_0}_c${c_0}_Np${Np}_sverts${nverts}_thomson.mesh")
+
+// 4. Initialize Particles object with particle mesh argument
+var p = Particles(particleMesh)
+
+// 5. Project particles onto substrate (Particles object method, Substrate object argument)
+p.project(s)
+
+var vol_0 = ellipsoid_vol(a_0,b_0,c_0)
+print("constant initial volume: ${vol_0}")
+print("equivalent spherical radius: ${rad(vol_0)}")
+print("equivalent spherical area: ${sphere_area(rad(vol_0))}")
+
+print("")
+print("jamming targets")
+var tgt_jammed_a = 1.65
+var tgt_jammed_b = bfunc(tgt_jammed_a, vol_0)
+var tgt_jammed_area = ellipsoid_area(tgt_jammed_a, tgt_jammed_b, tgt_jammed_b)
+print("a: ${tgt_jammed_a} b: ${tgt_jammed_b} area: ${tgt_jammed_area}")
+var tgt_coverage_fraction = 0.9
+var tgt_sigma = 2*sqrt(tgt_coverage_fraction*tgt_jammed_area/(Np*Pi))
+print("tgt sigma: ${tgt_sigma}")
+var using_sigma = tgt_sigma
+print("using sigma: ${using_sigma}")
+// var init_sigma = 0.01
+var init_sigma = using_sigma/2
+var V0 = 3
+
+// Optimization parameters
+var substrate_opt_stepsize = 0.005
+var particle_opt_stepsize = 1e-5
+
+var relaxCycles = 4000 // substrate update steps
+var cycleSubsteps = 100 // particle relaxation steps per substrate update step
+
+// Set up problems
+var sproblem = OptimizationProblem(s.mesh)
+var sarea = Area()
+// need a "mirror" pairwise potential that is callable in the substrate problem
+// integral should be evaluated on particles, gradient should be numerically evaluated over substrate vertices
+var hertz = HertzianPotential(init_sigma) // hertzian potential functional implemented in C
+var pw = Pairwise(hertz, cutoff=init_sigma) // pairwise potential obj using hertzian functional in C
+var mirror_pot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-4) // mirror potential implemented in morpho using C ingredients
+var scurve = MeanCurvatureSq()
+var svol = VolumeEnclosed()
+sproblem.addenergy(sarea)
+sproblem.addenergy(mirror_pot, prefactor=V0)
+sproblem.addenergy(scurve, prefactor=0.1)
+sproblem.addconstraint(svol)
+
+var pproblem = OptimizationProblem(p.points)
+pproblem.addenergy(pw)
+
+var sopt = SubstrateOptimizer(sproblem, s)
+var popt = ParticleOptimizer(pproblem, p, s)
+
+sopt.quiet=true
+// popt.quiet=true
+sopt.stepsize = substrate_opt_stepsize
+sopt.maxconstraintsteps = 100
+popt.stepsize = particle_opt_stepsize
+
+var ds = linear_sigma(using_sigma, init_sigma, ellipsoid_area(a_0,b_0,c_0), tgt_jammed_area)
+
+var fileRoot = "jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_tgta${tgt_jammed_a}_cvg${tgt_coverage_fraction}_V0_${V0}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}"
+
+var mm_z = MovieMaker("${t}_view_z_${fileRoot}")
+mm_z.framerate = 30
+mm_z.viewpoint = Matrix([0,0,5])
+mm_z.viewangle = 70
+var mm_x = MovieMaker("${t}_view_x_${fileRoot}")
+mm_x.framerate = 30
+mm_x.viewpoint = Matrix([5,0,0])    
+mm_x.viewangle = 70
+var mm_iso = MovieMaker("${t}_view_iso_${fileRoot}")
+mm_iso.framerate = 30
+mm_iso.viewpoint = Matrix([5,5,5])*5/Matrix([5,5,5]).norm()
+mm_iso.viewangle = 70
+mm_iso.look_at = Matrix([1,0,0])
+mm_iso.sky = Matrix([-1,2,-1])
+
+var substrate_areas = [sproblem.energies[0].functional.total(s.mesh)]
+var substrate_particle_energies = [sproblem.energies[1].functional.total(nil)]
+var substrate_curvature_energies = [sproblem.energies[2].functional.total(s.mesh)]
+var substrate_energies = [substrate_areas[-1]+substrate_particle_energies[-1]+substrate_curvature_energies[-1]]
+
+var newppot
+var newmirrorpot
+var newSigma = init_sigma
+for (i in 0...relaxCycles) {
+    newSigma = max(newSigma, ds(sproblem.energies[0].functional.total(s.mesh)))
+    pw.cutoff = newSigma
+    hertz.sigma = newSigma
+    newmirrorpot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-3)
+    sproblem.energies[1].functional = newmirrorpot
+    pproblem.energies[0].functional = pw
+    
+    sopt.settarget(s.mesh.vertexmatrix())
+    sopt.relax(1)
+    s.updateCoords()
+    p.updateCartesianCoords(s)
+    popt.settarget(p.points.vertexmatrix())
+    popt.relax(cycleSubsteps)
+
+    substrate_areas.append(sproblem.energies[0].functional.total(s.mesh))
+    substrate_particle_energies.append(sproblem.energies[1].functional.total(nil))
+    substrate_curvature_energies.append(sproblem.energies[2].functional.total(s.mesh))
+    substrate_energies.append(substrate_areas[-1]+substrate_particle_energies[-1]+substrate_curvature_energies[-1])
+
+    if (mod(i,5)==0) {
+        var g = Graphics()
+        g += plotmesh(s.mesh, grade=[2])
+        for (i in 0...p.points.count(0)) {
+            g.display(Sphere(p.points.vertexposition(i), newSigma/2, color=Green))
+        }
+        for (obj in [mm_z, mm_x, mm_iso]) {
+            var gtext = Graphics()
+            gtext.display(Text("iter: ${i}", [1,1.5,0], size=12, dirn=cross(obj.viewpoint, -1*obj.sky), vertical=obj.sky))
+            gtext += g
+            obj.frame(gtext)
+        }
+    }
+
+    print("iter: ${i} energy: ${substrate_energies[-1]} (delta E: ${substrate_energies[-1]-substrate_energies[-2]}) area: ${substrate_areas[-1]} (delta E: ${substrate_areas[-1]-substrate_areas[-2]}) pw energy: ${substrate_particle_energies[-1]} (delta E: ${substrate_particle_energies[-1]-substrate_particle_energies[-2]}) crv energy: ${substrate_curvature_energies[-1]} (delta E: ${substrate_curvature_energies[-1]-substrate_curvature_energies[-2]}) stepsize: ${sopt.stepsize}")
+
+    // convergence stopping criteria
+    if ((i > 1) and (abs(substrate_energies[-1]-substrate_energies[-2]) < 1e-8)) break
+}
+
+mm_z.make()
+mm_x.make()
+mm_iso.make()
+mm_z.clean()
+mm_x.clean()
+mm_iso.clean()
+
+var pp = ParticlePlotter()
+pp.plot(p, s, substrateGrade=[2], points=true, particleRad=newSigma/2)
+
+// p.points.save("./meshes/${t}_pmesh_${fileRoot}.mesh")
+// s.mesh.save("./meshes/${t}_smesh_${fileRoot}.mesh")
+
+var f = File("../data/${t}_energies_${fileRoot}.txt", "w")
+f.write("iter,substrate_energy,substrate_area,substrate_particle_energy,substrate_curvature_energy")
+for (i in 0...substrate_energies.count()) {
+    f.write("${i},${substrate_energies[i]},${substrate_areas[i]},${substrate_particle_energies[i]},${substrate_curvature_energies[i]}")
+}
+
+var f = File("../data/${t}_pGradNorms_${fileRoot}.txt", "w")
+for (x in popt.gradNorms) {
+    f.write(listToString(x))
+}
+
+var f = File("../data/${t}_sGradNorms_${fileRoot}.txt", "w")
+for (x in sopt.gradNorms) {
+    f.write(listToString(x))
+}

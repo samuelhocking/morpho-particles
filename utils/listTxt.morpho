@@ -1,0 +1,21 @@
+fn listToString (list) {
+    var string = "${list[0]}"
+    if (list.count() > 1) {
+        for (i in 1...list.count()) {
+            string += ",${list[i]}"
+        }
+    }
+    return string
+}
+
+// test
+// var lists = [
+//     [1,2,3,4,5,6,7,8,9,10],
+//     [10,2,3,4,5,6,7,8,9,10],
+//     [100,2,3,4,5,6,7,8,9,10]
+// ]
+
+// var f = File("./data/list.txt", "w")
+// for (list in lists) {
+//     f.write(listToString(list))
+// }

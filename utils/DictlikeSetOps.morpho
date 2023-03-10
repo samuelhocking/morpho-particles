@@ -1,0 +1,30 @@
+// Dict-like set operations
+// By: Sam Hocking
+
+// convert array to nil-valued dictionary to facilitate set operations
+fn arrToNilDict(arr) {
+    var dict = Dictionary()
+    for (x in arr) dict[x] = nil
+    return dict
+}
+
+// get list of keys from dictionary
+fn getKeys(dict) {
+    var arr = []
+    for (k in dict) arr.append(k)
+    return arr
+}
+
+// convert two lists to nil-valued dictionaries and perform intersection, returns list
+fn dictlikeIntersection(a, b) {
+    return getKeys(
+        arrToNilDict(a).intersection(arrToNilDict(b))
+    )
+}
+
+// convert two lists to nil-valued dictionaries and perform union, returns list
+fn dictlikeUnion(a, b) {
+    return getKeys(
+        arrToNilDict(a).union(arrToNilDict(b))
+    )
+}
