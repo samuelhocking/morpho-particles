@@ -1,0 +1,133 @@
+// Substrate vertex gradient w/r/t particle energy functional
+
+import meshtools
+import plot
+import functionals
+import pairwise
+
+import "morpho-particles.morpho" 
+import "RandomPoints.morpho"
+import "ParticleOptimizer.morpho"
+import "LinAlgTools.morpho"
+import "moviemaker.morpho"
+import "TimingFuncs.morpho"
+import "listTxt.morpho"
+
+fn hertzian_func (sigma=0.1, V0=100) {
+    sigma = sigma
+    V0 = V0
+    fn inner(r) {
+        if (r < sigma) {
+            return V0*(1-r/sigma)^(5/2)
+        } else {
+            return 0
+        }
+    }
+    return inner
+}
+fn hertzian_grad (sigma=0.1, V0=100) {
+    sigma = sigma
+    V0 = V0
+    fn inner(r) {
+        if (r < sigma) {
+            return -5*V0/(2*sigma)*(1-r/sigma)^(3/2)
+        } else {
+            return 0
+        }
+    }
+    return inner
+}
+
+var t = takeTime("t.txt")
+
+// 1. Build substrate mesh
+var nverts = 162 // options: 42, 162, 642, 2562, 10242
+var mesh = Mesh("./meshes/sphere_icosa_r_1_vol_4.18879_${nverts}_vertices.mesh")
+var a = 3
+var b = 1
+var c = 1
+var M = Matrix([
+    [a,0,0],
+    [0,b,0],
+    [0,0,c]
+])
+mesh.setvertexmatrix(M*mesh.vertexmatrix())
+// mesh.addgrade(2)
+// Show(plotmesh(mesh, grade=[2]))
+
+// 2. Initialize Substrate object with substrate mesh argument
+var s = Substrate(mesh)
+
+// 3. Build particle mesh
+var Np = 300 // Number of particles
+var ptsArr = GenRandomSphere(2*Np, 1.05*a)
+var mbb = MeshBuilder()
+for (x in ptsArr) mbb.addvertex(x)
+var particleMesh = mbb.build()
+
+// 4. Initialize Particles object with particle mesh argument
+var p = Particles(particleMesh)
+
+// 5. Project particles onto substrate (Particles object method, Substrate object argument)
+// p.project(s)
+p.cleanProject(s, maxPoints=Np, verbose=true)
+
+var d = p.findDupes(p.points)
+print("\n")
+print("check:")
+print("dupes : ${d.count()}")
+
+var pproblem = OptimizationProblem(p.points)
+// var ppot = PairwisePotential(fn (r) 1/r, fn (r) -1/r^2)
+// var ppot = PairwisePotential(hertzian_func(sigma=0.3, V0=1),hertzian_grad(sigma=0.3, V0=1))
+var ppot = Pairwise(CoulombPotential())
+// var ppot = Pairwise(HertzianPotential(0.3))
+// ppot.cutoff = 0.3
+// pproblem.addenergy(ppot)
+pproblem.addenergy(ppot, prefactor=1)
+
+var popt = ParticleOptimizer(pproblem, p, s)
+popt.stepsize=1e-4
+popt.quiet = true
+
+var iters = 10000
+var fileRoot = "ellipsoid_thomson_a${a}_b${b}_c${c}_Np${Np}_poptstep${popt.stepsize}"
+var mm_z = MovieMaker("${t}_view_z_${fileRoot}")
+mm_z.framerate = 120
+mm_z.viewpoint = Matrix([0,0,5])
+mm_z.viewangle = 40
+
+for (i in 0...iters) {
+    popt.relax(1)
+
+
+    // for (obj in [mm_z]) {
+    //     var gtext = Graphics()
+    //     gtext.display(Text("iter: ${i}", [1,1.5,0], size=12, dirn=cross(obj.viewpoint, -1*obj.sky), vertical=obj.sky))
+    //     gtext += g
+    //     obj.frame(gtext)
+    // }
+
+    print("iter: ${i} energy: ${popt.energy[-1]} (delta E: ${popt.energy[-1]-popt.energy[-2]}) stepsize: ${popt.stepsize}")
+
+    if ((i > 1) and (abs(popt.energy[-1]-popt.energy[-2]) < 1e-8)) break
+
+}
+
+var g = Graphics()
+g += plotmesh(s.mesh, grade=[2])
+for (i in 0...p.points.count(0)) {
+    g.display(Sphere(p.points.vertexposition(i), 0.15, color=Green))
+}
+mm_z.frame(g)
+
+// mm_z.make()
+// mm_z.clean()
+
+// 8. Invoke ParticlePlotter object
+var pp = ParticlePlotter()
+pp.plot(p, s, substrateGrade=[2], points=true)
+
+p.points.save("./meshes/a${a}_b${b}_c${c}_Np${Np}_sverts${nverts}_thomson.mesh")
+
+

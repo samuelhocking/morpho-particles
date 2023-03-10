@@ -1,0 +1,55 @@
+import meshtools
+import plot
+import functionals
+
+import "morpho-particles.morpho" 
+import "RandomPoints.morpho"
+import "ParticleOptimizer.morpho"
+import "LinAlgTools.morpho"
+import "TimingFuncs.morpho"
+
+var t = takeTime("t.txt")
+
+// 1. Build substrate mesh
+var nverts = 162 // options: 42, 162, 642, 2562, 10242
+var mesh = Mesh("./meshes/sphere_icosa_r_1_vol_4.18879_${nverts}_vertices.mesh")
+var a = 3
+var b = 1
+var c = 1
+var M = Matrix([
+    [a,0,0],
+    [0,b,0],
+    [0,0,c]
+])
+mesh.setvertexmatrix(M*mesh.vertexmatrix())
+// mesh.addgrade(2)
+// Show(plotmesh(mesh, grade=[2]))
+
+// 2. Initialize Substrate object with substrate mesh argument
+var s = Substrate(mesh)
+
+var sproblem = OptimizationProblem(s.mesh)
+var sarea=Area()
+var scurve = MeanCurvatureSq()
+var svol = VolumeEnclosed()
+sproblem.addenergy(sarea, prefactor=1)
+// sproblem.addenergy(scurve, prefactor=0.1)
+sproblem.addconstraint(svol)
+
+var sopt = ShapeOptimizer(sproblem, s.mesh)
+sopt.stepsize=0.005
+var iters = 100000
+sopt.relax(iters)
+print("substrate energy: ${sopt.totalenergy()}")
+s.updateCoords()
+
+// 9. Plot
+Show(plotmesh(s.mesh, grade=[2]))
+
+var fileRoot = "ellipsoid_relax_a${a}_b${b}_c${c}_Np${nverts}_iters${iters}_step${sopt.stepsize}"
+
+var f = File("./data/${t}_energies_${fileRoot}.txt", "w")
+f.write("iter,substrate_area")
+for (i in 0...sopt.energy.count()) {
+    f.write("${i},${sopt.energy[i]}")
+}
