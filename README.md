@@ -2,12 +2,12 @@
 
 ## Installation
 
-Place `morpho-particles.morpho`, `DictlikeSetOps.morpho`, `LinAlgTools.morpho`, and `RandomPoints.morpho` in your current working directory. Import `morpho-particles.morpho` and `RandomPoints.morpho` with the `import` command:
-
-	import "morpho-particles.morpho" 
-	import "RandomPoints.morpho"
+Run `git clone https://github.com/samuelhocking/morpho-particles.git` in the directory of your choice.
 
 ## Usage
+
+Use the `scripts` folder to save any `morpho` scripts making use of the utility modules included in `utils`. Untangling these is not difficult; simply go through the headers of the `utils` files and revise the paths in the `import` statements as necessary. 
+
 ### Basic Example
 
 Set up a mesh. For example, a flat plane:
@@ -114,7 +114,7 @@ A built-in plotting object, `ParticlePlotter` is also included to faciliate plot
 		substrateGrade=[2],
 		projectablePoints=true,
 		projectedPoints=true,
-		movedPoints=true
+		points=true
 		)
 	
 ### Torus Example
