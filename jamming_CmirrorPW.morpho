@@ -96,7 +96,7 @@ var t = takeTime("t.txt")
 // 1. Build substrate mesh
 var nverts = 162 // options: 42, 162, 642, 2562, 10242
 var mesh = Mesh("./meshes/sphere_icosa_r_1_vol_4.18879_${nverts}_vertices.mesh")
-var a_0 = 3
+var a_0 = 2
 var b_0 = 1
 var c_0 = 1
 var M = Matrix([
@@ -126,7 +126,7 @@ print("equivalent spherical area: ${sphere_area(rad(vol_0))}")
 
 print("")
 print("jamming targets")
-var tgt_jammed_a = 2.75 // 1.85 or 2.75
+var tgt_jammed_a = 1.65 // 1.85 or 2.75
 var tgt_jammed_b = bfunc(tgt_jammed_a, vol_0)
 var tgt_jammed_area = ellipsoid_area(tgt_jammed_a, tgt_jammed_b, tgt_jammed_b)
 // var tgt_jammed_area = ellipsoid_area(a_0, b_0, c_0)
@@ -138,14 +138,14 @@ var using_sigma = tgt_sigma
 print("using sigma: ${using_sigma}")
 // var init_sigma = 0.01
 var init_sigma = using_sigma/2
-var V0 = 10
+var V0 = 3
 
 // Optimization parameters
 var substrate_opt_stepsize = 0.005
 // var particle_opt_stepsize = 5e-5 // 1e-4 too high with maxnorm=0.05
 var particle_opt_stepsize = 1e-5 // 1e-4 too high with maxnorm=0.05
 
-var relaxCycles = 3000 // substrate update steps
+var relaxCycles = 4000 // substrate update steps
 var cycleSubsteps = 100 // particle relaxation steps per substrate update step
 
 // Set up problems
@@ -155,12 +155,12 @@ var sarea = Area()
 // var mirror_pot = MirrorPairwisePotential(hertzian_func(sigma=init_sigma, V0=V0), p, s, gradStepsize=1e-3)
 var hertz = HertzianPotential(init_sigma)
 var pw = Pairwise(hertz, cutoff=init_sigma)
-var mirror_pot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-3)
+var mirror_pot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-4)
 var scurve = MeanCurvatureSq()
 var svol = VolumeEnclosed()
 sproblem.addenergy(sarea)
-sproblem.addenergy(mirror_pot)
-sproblem.addenergy(scurve, prefactor=0.01)
+sproblem.addenergy(mirror_pot, prefactor=V0)
+sproblem.addenergy(scurve, prefactor=0.1)
 sproblem.addconstraint(svol)
 
 var pproblem = OptimizationProblem(p.points)
@@ -190,11 +190,11 @@ var ds = linear_sigma(using_sigma, init_sigma, ellipsoid_area(a_0,b_0,c_0), tgt_
 var fileRoot = "jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_tgta${tgt_jammed_a}_cvg${tgt_coverage_fraction}_V0_${V0}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}"
 
 var mm_z = MovieMaker("${t}_view_z_${fileRoot}")
-mm_z.framerate = 120
+mm_z.framerate = 30
 mm_z.viewpoint = Matrix([0,0,5])
 mm_z.viewangle = 70
 var mm_x = MovieMaker("${t}_view_x_${fileRoot}")
-mm_x.framerate = 120
+mm_x.framerate = 30
 mm_x.viewpoint = Matrix([5,0,0])    
 mm_x.viewangle = 70
 // var mm_neg_x = MovieMaker("${t}_view_negx_${fileRoot}")
@@ -202,7 +202,7 @@ mm_x.viewangle = 70
 // mm_neg_x.viewpoint = Matrix([-5,0,0])
 // mm_neg_x.viewangle = 70
 var mm_iso = MovieMaker("${t}_view_iso_${fileRoot}")
-mm_iso.framerate = 120
+mm_iso.framerate = 30
 mm_iso.viewpoint = Matrix([5,5,5])*5/Matrix([5,5,5]).norm()
 mm_iso.viewangle = 70
 mm_iso.look_at = Matrix([1,0,0])
@@ -243,17 +243,19 @@ for (i in 0...relaxCycles) {
     substrate_energies.append(substrate_areas[-1]+substrate_particle_energies[-1]+substrate_curvature_energies[-1])
     // particle_energies.append(popt.totalenergy())
 
-    var g = Graphics()
-    g += plotmesh(s.mesh, grade=[2])
-    for (i in 0...p.points.count(0)) {
-        g.display(Sphere(p.points.vertexposition(i), newSigma/2, color=Green))
-    }
-    // for (obj in [mm_z, mm_x, mm_neg_x, mm_iso]) {
-    for (obj in [mm_z, mm_x, mm_iso]) {
-        var gtext = Graphics()
-        gtext.display(Text("iter: ${i}", [1,1.5,0], size=12, dirn=cross(obj.viewpoint, -1*obj.sky), vertical=obj.sky))
-        gtext += g
-        obj.frame(gtext)
+    if (mod(i,5)==0) {
+        var g = Graphics()
+        g += plotmesh(s.mesh, grade=[2])
+        for (i in 0...p.points.count(0)) {
+            g.display(Sphere(p.points.vertexposition(i), newSigma/2, color=Green))
+        }
+        // for (obj in [mm_z, mm_x, mm_neg_x, mm_iso]) {
+        for (obj in [mm_z, mm_x, mm_iso]) {
+            var gtext = Graphics()
+            gtext.display(Text("iter: ${i}", [1,1.5,0], size=12, dirn=cross(obj.viewpoint, -1*obj.sky), vertical=obj.sky))
+            gtext += g
+            obj.frame(gtext)
+        }
     }
 
     print("iter: ${i} energy: ${substrate_energies[-1]} (delta E: ${substrate_energies[-1]-substrate_energies[-2]}) area: ${substrate_areas[-1]} (delta E: ${substrate_areas[-1]-substrate_areas[-2]}) pw energy: ${substrate_particle_energies[-1]} (delta E: ${substrate_particle_energies[-1]-substrate_particle_energies[-2]}) crv energy: ${substrate_curvature_energies[-1]} (delta E: ${substrate_curvature_energies[-1]-substrate_curvature_energies[-2]}) stepsize: ${sopt.stepsize}")
@@ -266,10 +268,10 @@ mm_z.make()
 mm_x.make()
 // mm_neg_x.make()
 mm_iso.make()
-mm_z.clean()
-mm_x.clean()
+// mm_z.clean()
+// mm_x.clean()
 // mm_neg_x.clean()
-mm_iso.clean()
+// mm_iso.clean()
 
 var pp = ParticlePlotter()
 pp.plot(p, s, substrateGrade=[2], points=true, particleRad=newSigma/2)

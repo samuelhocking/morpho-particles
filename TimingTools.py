@@ -7,7 +7,8 @@ import os
 from CommTools import Comm
 
 class datetimeTimingTools():
-    def __init__(self, filename="comm.txt", format="%Y_%m_%d_%R"):
+    # def __init__(self, filename="comm.txt", format="%Y_%m_%d_%R"):
+    def __init__(self, filename="comm.txt", format="%Y_%m_%d_%X"):
         self.format = format
         self.filename = filename
     def writeDT(self):
