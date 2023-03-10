@@ -250,8 +250,8 @@ mm_iso.clean()
 var pp = ParticlePlotter()
 pp.plot(p, s, substrateGrade=[2], points=true, particleRad=newSigma/2)
 
-p.points.save("./meshes/${t}_pmesh_${fileRoot}.mesh")
-s.mesh.save("./meshes/${t}_smesh_${fileRoot}.mesh")
+// p.points.save("./meshes/${t}_pmesh_${fileRoot}.mesh")
+// s.mesh.save("./meshes/${t}_smesh_${fileRoot}.mesh")
 
 var f = File("./data/${t}_energies_${fileRoot}.txt", "w")
 f.write("iter,substrate_energy,substrate_area,substrate_particle_energy,substrate_curvature_energy")
