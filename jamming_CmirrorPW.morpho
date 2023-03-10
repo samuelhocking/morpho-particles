@@ -1,4 +1,5 @@
-// Attempt to model metric jamming driven by particles embedded on mesh surface
+// Inducing metric jamming driven by particles embedded on mesh surface
+// By: Sam Hocking
 
 import meshtools
 import plot
@@ -77,7 +78,6 @@ fn dynamic_sigma(tgtSigma, initSigma, tgtArea, c=1, d=0, e=0) {
     c = c
     fn inner(area) {
         return initSigma + 1/2*(tgtSigma-initSigma)*(1+tanh(c*(tgtArea-area)+d*5/4*Pi))
-        // return initSigma + 1/2*(tgtSigma-initSigma)*(1+tanh(c*(tgtArea-area)+d*5/4*Pi))+e*max(0,tgtArea-area)*(tgtSigma-initSigma)
     }
     return inner
 }
@@ -126,12 +126,11 @@ print("equivalent spherical area: ${sphere_area(rad(vol_0))}")
 
 print("")
 print("jamming targets")
-var tgt_jammed_a = 1.65 // 1.85 or 2.75
+var tgt_jammed_a = 1.65
 var tgt_jammed_b = bfunc(tgt_jammed_a, vol_0)
 var tgt_jammed_area = ellipsoid_area(tgt_jammed_a, tgt_jammed_b, tgt_jammed_b)
-// var tgt_jammed_area = ellipsoid_area(a_0, b_0, c_0)
 print("a: ${tgt_jammed_a} b: ${tgt_jammed_b} area: ${tgt_jammed_area}")
-var tgt_coverage_fraction = 0.9 // this is really ~0.9 but I want to skew towards jamming (larger sigma*)vs. not
+var tgt_coverage_fraction = 0.9
 var tgt_sigma = 2*sqrt(tgt_coverage_fraction*tgt_jammed_area/(Np*Pi))
 print("tgt sigma: ${tgt_sigma}")
 var using_sigma = tgt_sigma
@@ -142,8 +141,7 @@ var V0 = 3
 
 // Optimization parameters
 var substrate_opt_stepsize = 0.005
-// var particle_opt_stepsize = 5e-5 // 1e-4 too high with maxnorm=0.05
-var particle_opt_stepsize = 1e-5 // 1e-4 too high with maxnorm=0.05
+var particle_opt_stepsize = 1e-5
 
 var relaxCycles = 4000 // substrate update steps
 var cycleSubsteps = 100 // particle relaxation steps per substrate update step
@@ -151,11 +149,11 @@ var cycleSubsteps = 100 // particle relaxation steps per substrate update step
 // Set up problems
 var sproblem = OptimizationProblem(s.mesh)
 var sarea = Area()
-// var mirror_pot = MirrorPairwisePotential(hertzian_func(sigma=init_sigma, V0=Np), p, s, gradStepsize=substrate_opt_stepsize)
-// var mirror_pot = MirrorPairwisePotential(hertzian_func(sigma=init_sigma, V0=V0), p, s, gradStepsize=1e-3)
-var hertz = HertzianPotential(init_sigma)
-var pw = Pairwise(hertz, cutoff=init_sigma)
-var mirror_pot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-4)
+// need a "mirror" pairwise potential that is callable in the substrate problem
+// integral should be evaluated on particles, gradient should be numerically evaluated over substrate vertices
+var hertz = HertzianPotential(init_sigma) // hertzian potential functional implemented in C
+var pw = Pairwise(hertz, cutoff=init_sigma) // pairwise potential obj using hertzian functional in C
+var mirror_pot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-4) // mirror potential implemented in morpho using C ingredients
 var scurve = MeanCurvatureSq()
 var svol = VolumeEnclosed()
 sproblem.addenergy(sarea)
@@ -164,16 +162,9 @@ sproblem.addenergy(scurve, prefactor=0.1)
 sproblem.addconstraint(svol)
 
 var pproblem = OptimizationProblem(p.points)
-// var ppot = PairwisePotential(hertzian_func(sigma=init_sigma, V0=Np),hertzian_grad(sigma=init_sigma, V0=Np))
-// var ppot = PairwisePotential(hertzian_func(sigma=init_sigma, V0=V0),hertzian_grad(sigma=init_sigma, V0=V0))
-// pproblem.addenergy(ppot)
 pproblem.addenergy(pw)
 
-// var sopt = SubstrateOptimizer(sproblem, s)
-// var popt = ParticleOptimizer(pproblem, p, s)
-// var sopt = SubstrateOptimizer(sproblem, s, maxForceNorm=0.02) // how to size maxForceNorm?
-// var popt = ParticleOptimizer(pproblem, p, s, maxForceNorm=0.02)
-var sopt = SubstrateOptimizer(sproblem, s) // how to size maxForceNorm?
+var sopt = SubstrateOptimizer(sproblem, s)
 var popt = ParticleOptimizer(pproblem, p, s)
 
 sopt.quiet=true
@@ -182,10 +173,7 @@ sopt.stepsize = substrate_opt_stepsize
 sopt.maxconstraintsteps = 100
 popt.stepsize = particle_opt_stepsize
 
-// var ds = dynamic_sigma(using_sigma, init_sigma, tgt_jammed_area, c=20, d=1, e=1)
-// var ds = dynamic_sigma(using_sigma, init_sigma, tgt_jammed_area, c=5, d=1, e=1) // used this or c=10 for most runs
-// var ds = dynamic_sigma(using_sigma, init_sigma, tgt_jammed_area, c=3, d=1, e=1) // marginally less abrupt inflation to avoid blow-up during reorg during inflation
-var ds = linear_sigma(using_sigma, init_sigma, ellipsoid_area(a_0,b_0,c_0), tgt_jammed_area) // marginally less abrupt inflation to avoid blow-up during reorg during inflation
+var ds = linear_sigma(using_sigma, init_sigma, ellipsoid_area(a_0,b_0,c_0), tgt_jammed_area)
 
 var fileRoot = "jam_a${a_0}_b${b_0}_c${c_0}_Np${Np}_tgta${tgt_jammed_a}_cvg${tgt_coverage_fraction}_V0_${V0}_sigma${using_sigma}_iters${relaxCycles}_substeps${cycleSubsteps}_soptstep${sopt.stepsize}_poptstep${popt.stepsize}"
 
@@ -197,10 +185,6 @@ var mm_x = MovieMaker("${t}_view_x_${fileRoot}")
 mm_x.framerate = 30
 mm_x.viewpoint = Matrix([5,0,0])    
 mm_x.viewangle = 70
-// var mm_neg_x = MovieMaker("${t}_view_negx_${fileRoot}")
-// mm_neg_x.framerate = 60
-// mm_neg_x.viewpoint = Matrix([-5,0,0])
-// mm_neg_x.viewangle = 70
 var mm_iso = MovieMaker("${t}_view_iso_${fileRoot}")
 mm_iso.framerate = 30
 mm_iso.viewpoint = Matrix([5,5,5])*5/Matrix([5,5,5]).norm()
@@ -211,21 +195,16 @@ mm_iso.sky = Matrix([-1,2,-1])
 var substrate_areas = [sproblem.energies[0].functional.total(s.mesh)]
 var substrate_particle_energies = [sproblem.energies[1].functional.total(nil)]
 var substrate_curvature_energies = [sproblem.energies[2].functional.total(s.mesh)]
-// var substrate_energies = [sopt.totalenergy()]
 var substrate_energies = [substrate_areas[-1]+substrate_particle_energies[-1]+substrate_curvature_energies[-1]]
-// var particle_energies = [popt.totalenergy()]
 
 var newppot
 var newmirrorpot
 var newSigma = init_sigma
 for (i in 0...relaxCycles) {
     newSigma = max(newSigma, ds(sproblem.energies[0].functional.total(s.mesh)))
-    // newmirrorpot = MirrorPairwisePotential(hertzian_func(sigma=newSigma, V0=Np), p, s, gradStepsize=substrate_opt_stepsize)
-    // newppot = PairwisePotential(hertzian_func(sigma=newSigma, V0=Np), hertzian_grad(sigma=newSigma, V0=Np))
     pw.cutoff = newSigma
     hertz.sigma = newSigma
     newmirrorpot = CMirrorPairwisePotential(pw, p, s, gradStepsize=1e-3)
-    // newppot = PairwisePotential(hertzian_func(sigma=newSigma, V0=V0), hertzian_grad(sigma=newSigma, V0=V0))
     sproblem.energies[1].functional = newmirrorpot
     pproblem.energies[0].functional = pw
     
@@ -239,9 +218,7 @@ for (i in 0...relaxCycles) {
     substrate_areas.append(sproblem.energies[0].functional.total(s.mesh))
     substrate_particle_energies.append(sproblem.energies[1].functional.total(nil))
     substrate_curvature_energies.append(sproblem.energies[2].functional.total(s.mesh))
-    // substrate_energies.append(sopt.totalenergy())
     substrate_energies.append(substrate_areas[-1]+substrate_particle_energies[-1]+substrate_curvature_energies[-1])
-    // particle_energies.append(popt.totalenergy())
 
     if (mod(i,5)==0) {
         var g = Graphics()
@@ -249,7 +226,6 @@ for (i in 0...relaxCycles) {
         for (i in 0...p.points.count(0)) {
             g.display(Sphere(p.points.vertexposition(i), newSigma/2, color=Green))
         }
-        // for (obj in [mm_z, mm_x, mm_neg_x, mm_iso]) {
         for (obj in [mm_z, mm_x, mm_iso]) {
             var gtext = Graphics()
             gtext.display(Text("iter: ${i}", [1,1.5,0], size=12, dirn=cross(obj.viewpoint, -1*obj.sky), vertical=obj.sky))
@@ -266,12 +242,10 @@ for (i in 0...relaxCycles) {
 
 mm_z.make()
 mm_x.make()
-// mm_neg_x.make()
 mm_iso.make()
-// mm_z.clean()
-// mm_x.clean()
-// mm_neg_x.clean()
-// mm_iso.clean()
+mm_z.clean()
+mm_x.clean()
+mm_iso.clean()
 
 var pp = ParticlePlotter()
 pp.plot(p, s, substrateGrade=[2], points=true, particleRad=newSigma/2)
